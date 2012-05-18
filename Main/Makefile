@@ -117,11 +117,12 @@ DEBUG = dwarf-2
 EXTRAINCDIRS = $(IN2_COMMON)/lib
 EXTRAINCDIRS += $(IN2_COMMON)/screens
 EXTRAINCDIRS += $(IN2_COMMON)/LPCUSB
+EXTRAINCDIRS += /home/rghunter/toolchains/arm-2011.03/arm-none-eabi/include
 
 # List any extra directories to look for library files here.
 #     Each directory must be seperated by a space.
 #EXTRA_LIBDIRS = ../arm7_efsl_0_2_4
-EXTRA_LIBDIRS = 
+EXTRA_LIBDIRS = /home/rghunter/toolchains/arm-2011.03/arm-none-eabi/lib
 
 
 # Compiler flag to set the C Standard level.
@@ -252,12 +253,18 @@ LPC21ISP_CONTROL = -control
 
 # Define programs and commands.
 SHELL = sh
-CC = arm-elf-gcc
-CPP = arm-elf-g++
-OBJCOPY = arm-elf-objcopy
-OBJDUMP = arm-elf-objdump
-SIZE = arm-elf-size
-NM = arm-elf-nm
+#CC = arm-elf-gcc
+CC = arm-none-eabi-gcc
+#CPP = arm-elf-g++
+CPP = arm-none-eabi-g++
+#OBJCOPY = arm-elf-objcopy
+OBJCOPY = arm-none-eabi-objcopy
+#OBJDUMP = arm-elf-objdump
+OBJDUMP = arm-none-eabi-objdump
+#SIZE = arm-elf-size
+SIZE = arm-none-eabi-size
+#NM = arm-elf-nm
+NM = arm-none-eabi-nm
 REMOVE = rm -f
 COPY = cp
 

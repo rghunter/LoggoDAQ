@@ -10,6 +10,10 @@
 #include <string.h>
 #include "LPC21xx.h"
 
+//Data Streaming
+#include "telemetry.h"
+#include <queue>
+
 //UART0 Debugging
 #include "serial.h"
 #include "rprintf.h"
@@ -57,6 +61,13 @@ static char ad0_4 = 'N';
 static char ad0_3 = 'N';
 static char ad0_2 = 'N';
 static char ad0_1 = 'N';
+static char start_trig = 'S';
+static char stop_trig = 'E';
+
+//Logging flags
+static char LogStart = OFF;
+static char Logging = OFF;
+static char LogStop = OFF;
 
 
 /*******************************************************
@@ -70,6 +81,7 @@ void setup_uart0(int newbaud, char want_ints);
 void mode_0(void);
 void mode_1(void);
 void mode_2(void);
+void mode_3(void);
 void mode_action(void);
 
 void Log_init(void);
@@ -109,7 +121,7 @@ int main (void)
 	
 	fat_initialize();		
 
-	setup_uart0(9600, 0);
+	setup_uart0(115200, 0);
 
 	// Flash Status Lights
 	for(i = 0; i < 5; i++)
@@ -154,6 +166,7 @@ int main (void)
 	if(mode == 0){ mode_0(); }
 	else if(mode == 1){ mode_1(); }
 	else if(mode == 2){ mode_2(); }
+	else if(mode == 3){ mode_3(); }
 
     	return 0;
 }
@@ -184,6 +197,7 @@ void feed(void)
 	PLLFEED=0xAA;
 	PLLFEED=0x55;
 }
+
 
 static void UART0ISR(void)
 {
@@ -259,6 +273,29 @@ static void UART0ISR_2(void)
 
 	VICVectAddr = 0;
 }
+
+static void UART0ISR_3(void)
+{
+	char temp;
+	temp = U0RBR;
+
+	if(temp == start_trig)
+	{
+		rprintf("\r\nBegin Logging...\r\n");
+		LogStart = ON;
+
+	}else if(temp == stop_trig)
+	{
+		rprintf("\r\nStop Logging...\r\n");
+		LogStop = ON;
+
+	}
+
+
+	temp = U0IIR;
+	VICVectAddr = 0;
+}
+
 		
 static void MODE2ISR(void)
 {
@@ -266,6 +303,8 @@ static void MODE2ISR(void)
 	int j;
 	short a;
 	char q[50], temp_buff[4];
+
+	rprintf("Hit loop\r\n");
 
 
 	T0IR = 1; // reset TMR0 interrupt
@@ -897,6 +936,15 @@ void setup_uart0(int newbaud, char want_ints)
 		VICVectAddr1 = (unsigned int)UART0ISR;
 		U0IER = 0x01;
 	}
+	else if(want_ints == 3)
+	{
+		enableIRQ();
+		VICIntSelect &= ~0x00000040;
+		VICIntEnable |= 0x00000040;
+		VICVectCntl1 = 0x26;
+		VICVectAddr1 = (unsigned int)UART0ISR_3;
+		U0IER = 0x01;
+	}
 	else if(want_ints == 2)
 	{
 		enableIRQ();
@@ -932,9 +980,11 @@ void Log_init(void)
 	char temp, temp2 = 0, safety = 0;
 //	signed char handle;
 
+	rprintf("\r\nLoggomatic IML EDITION!!!!!\r\n");
+
 	if(root_file_exists("LOGCON.txt"))
 	{
-		//rprintf("\n\rFound LOGcon.txt\n");
+		rprintf("\n\rFound LOGcon.txt\n");
 		fd = root_open("LOGCON.txt");
 		stringSize = fat16_read_file(fd, (unsigned char *)stringBuf, 512);
 		stringBuf[stringSize] = '\0';
@@ -942,7 +992,7 @@ void Log_init(void)
 	}
 	else
 	{
-		//rprintf("Couldn't find LOGcon.txt, creating...\n");
+		rprintf("Couldn't find LOGcon.txt, creating...\n");
 		fd = root_open_new("LOGCON.txt");
 		if(fd == NULL)
 		{
@@ -958,7 +1008,7 @@ void Log_init(void)
 			}
 		}
 
-		strcpy(stringBuf, "MODE = 0\r\nASCII = N\r\nBaud = 4\r\nFrequency = 100\r\nTrigger Character = $\r\nText Frame = 100\r\nAD1.3 = N\r\nAD0.3 = N\r\nAD0.2 = N\r\nAD0.1 = N\r\nAD1.2 = N\r\nAD0.4 = N\r\nAD1.7 = N\r\nAD1.6 = N\r\nSaftey On = Y\r\n");
+		strcpy(stringBuf, "MODE = 0\r\nASCII = N\r\nBaud = 4\r\nFrequency = 100\r\nTrigger Character = $\r\nText Frame = 100\r\nAD1.3 = N\r\nAD0.3 = N\r\nAD0.2 = N\r\nAD0.1 = N\r\nAD1.2 = N\r\nAD0.4 = N\r\nAD1.7 = N\r\nAD1.6 = N\r\nSafety On = Y\r\n");
 		stringSize = strlen(stringBuf);
 		fat16_write_file(fd, (unsigned char*)stringBuf, stringSize);
 		sd_raw_sync();
@@ -973,10 +1023,10 @@ void Log_init(void)
 			ind++;
 			if(ind == 1)
 			{
-				mode = stringBuf[mark-2]-48; // 0 = auto uart, 1 = trigger uart, 2 = adc
+				mode = stringBuf[mark-2]-48; // 0 = auto uart, 1 = trigger uart, 2 = adc, 3 = adc USART Start
 				rprintf("mode = %d\n\r",mode);
 			}
-			else if(ind == 2)
+			else if((ind == 2) && !(mode == 3))
 			{
 				asc = stringBuf[mark-2]; // default is 'N'
 				rprintf("asc = %c\n\r",asc);
@@ -1137,78 +1187,128 @@ void mode_2(void)
 	mode_action();
 }
 
+void mode_3(void)
+{
+	rprintf("MODE 3\n\r");
+	setup_uart0(baud,3);
+	enableIRQ();
+	VICIntSelect &= ~0x00000010;
+	// Enable Timer0 interrupt
+	VICIntEnable |= 0x00000010;
+	// Use slot 2 for UART0 interrupt
+	VICVectCntl2 = 0x24;
+	// Set the address of ISR for slot 1
+	VICVectAddr2 = (unsigned int)MODE2ISR;
+
+	T0TCR = 0x00000002;	// Reset counter and prescaler
+	T0MCR = 0x00000003;	// On match reset the counter and generate interrupt
+	T0MR0 = 58982400 / freq;
+
+	T0PR = 0x00000000;
+
+
+	stringSize = 512;
+	mode_action();
+}
+
 void mode_action(void)
 {
 	int j;
 	while(1)
 	{
 		
-		if(log_array1 == 1)
+		if(mode == 3)
 		{
-			stat(0,ON);
-				
-			if(fat16_write_file(handle,(unsigned char *)RX_array1, stringSize) < 0)
-			{
-				while(1)
-				{
-					stat(0,ON);
-					for(j = 0; j < 500000; j++)
-					stat(0,OFF);
-					stat(1,ON);
-					for(j = 0; j < 500000; j++)
-					stat(1,OFF);
-				}
-			}
-			
-			sd_raw_sync();
-			stat(0,OFF);
-			log_array1 = 0;
-		}
-
-		if(log_array2 == 1)
-		{
-			stat(1,ON);
-			
-			if(fat16_write_file(handle,(unsigned char *)RX_array2, stringSize) < 0)
-			{
-				while(1)
-				{
-					stat(0,ON);
-					for(j = 0; j < 500000; j++)
-					stat(0,OFF);
-					stat(1,ON);
-					for(j = 0; j < 500000; j++)
-					stat(1,OFF);
-				}
-			}
-			
-			sd_raw_sync();
-			stat(1,OFF);
-			log_array2 = 0;
-		}
-
-		if((IOPIN0 & 0x00000008) == 0) // if button pushed, log file & quit
-		{
-			VICIntEnClr = 0xFFFFFFFF;
-
-			if(RX_in < 512)
-			{
-				fat16_write_file(handle, (unsigned char *)RX_array1, RX_in);
-				sd_raw_sync();
-			}
-			else if(RX_in >= 512)
-			{
-				fat16_write_file(handle, (unsigned char *)RX_array2, RX_in - 512);
-				sd_raw_sync();
-			}
-			while(1)
+			//rprintf("\r\nMODE 3 SELECTED\r\n");
+			if(log_array1 == 1)
 			{
 				stat(0,ON);
-				for(j = 0; j < 500000; j++);
+				putstring_serial0((const char *)RX_array1);
+			}
+			if(LogStart)
+			{
+				T0TCR = 0x00000001; // enable timer
+				Logging = ON;
+				LogStart = OFF;
+			}
+			if(LogStop)
+			{
+				T0TCR &= ~(0x00000001); // enable timer
+				LogStop = OFF;
+				Logging = OFF;
+			}
+
+
+		}else
+		{
+			if(log_array1 == 1)
+			{
+				stat(0,ON);
+				
+				if(fat16_write_file(handle,(unsigned char *)RX_array1, stringSize) < 0)
+				{
+					while(1)
+					{
+						stat(0,ON);
+						for(j = 0; j < 500000; j++)
+						stat(0,OFF);
+						stat(1,ON);
+						for(j = 0; j < 500000; j++)
+						stat(1,OFF);
+					}
+				}
+			
+				sd_raw_sync();
 				stat(0,OFF);
+				log_array1 = 0;
+			}
+
+			if(log_array2 == 1)
+			{
 				stat(1,ON);
-				for(j = 0; j < 500000; j++);
+			
+				if(fat16_write_file(handle,(unsigned char *)RX_array2, stringSize) < 0)
+				{
+					while(1)
+					{
+						stat(0,ON);
+						for(j = 0; j < 500000; j++)
+						stat(0,OFF);
+						stat(1,ON);
+						for(j = 0; j < 500000; j++)
+						stat(1,OFF);
+					}
+				}
+			
+				sd_raw_sync();
 				stat(1,OFF);
+				log_array2 = 0;
+			}
+
+			if(((IOPIN0 & 0x00000008) == 0) || LogStop) // if button pushed, log file & quit
+			{
+				VICIntEnClr = 0xFFFFFFFF;
+
+				if(RX_in < 512)
+				{
+					fat16_write_file(handle, (unsigned char *)RX_array1, RX_in);
+					sd_raw_sync();
+				}
+				else if(RX_in >= 512)
+				{
+					fat16_write_file(handle, (unsigned char *)RX_array2, RX_in - 512);
+					sd_raw_sync();
+				}
+				while(1)
+				{
+					stat(0,ON);
+					for(j = 0; j < 500000; j++);
+					stat(0,OFF);
+					stat(1,ON);
+					for(j = 0; j < 500000; j++);
+					stat(1,OFF);
+				}
+				LogStop = OFF;
 			}
 		}
 	}
