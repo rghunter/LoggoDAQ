@@ -11,8 +11,6 @@
 #include "LPC21xx.h"
 
 //Data Streaming
-#include "telemetry.h"
-#include <queue>
 
 //UART0 Debugging
 #include "serial.h"
