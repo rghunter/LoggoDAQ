@@ -73,6 +73,9 @@ SRC += $(LIBPATH)itoa.c
 #SRC += $(USBPATH)usbcontrol.c 
 #SRC += $(USBPATH)usbstdreq.c
 
+#i2c bitbang library
+SRC += $(LIBPATH)twi.c
+
 # List C source files here which must be compiled in ARM-Mode.
 # use file-extension c for "c-only"-files
 SRCARM = $(LIBPATH)irq.c
