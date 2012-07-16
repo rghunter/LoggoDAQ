@@ -1,0 +1,23 @@
+Logomatic Kwan 1.1
+27 Aug 2009
+
+This file and the accompanying PDF are partial documentation of the Logomatic.
+For full details, read the original Sparkfun Logomatic docs, the Sparkfun
+compiling instructions, the SiRF binary protocol manual, and the source code.
+
+This program, its source code, and its documentation, are licensed under the
+GNU GPL, version 2.0 or above.
+
+- Installation -
+Copy FW.SFE to the Logomatic memory card and restart the Logomatic. Make sure to
+delete the LOGCON.TXT file from any old Sparkfun version of the firmware, as 
+this is incompatible with that. LOGCON.TXT from version 1.0 is still compatible.
+The firmware will create its own LOGCON.TXT as a template if needed, just as the 
+old version did. 
+
+Changes since version 1.0
+
+- Many bug fixes and code clean up
+- GPS time sync now works in NMEA
+- Powersave feature added
+

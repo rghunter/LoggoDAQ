@@ -61,6 +61,12 @@ SRC += $(USBPATH)usbcontrol.c
 SRC += $(USBPATH)usbstdreq.c
 SRC += $(USBPATH)armVIC.c
 
+#I2C bitbang library
+
+SRC += $(LIBPATH)twowire.c
+SRC += $(LIBPATH)setup.c
+SRC += $(LIBPATH)conparse.c
+
 # List C source files here which must be compiled in ARM-Mode.
 # use file-extension c for "c-only"-files
 SRCARM = $(LIBPATH)irq.c
