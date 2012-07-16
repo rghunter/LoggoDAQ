@@ -110,8 +110,7 @@ typedef uint8_t (*device_write_t)(uint32_t offset, const uint8_t* buffer, uint16
 /**
  * Describes a partition.
  */
-struct partition_struct
-{
+struct partition_struct {
     /**
      * The function which reads data from the partition.
      *
@@ -150,7 +149,7 @@ struct partition_struct
     uint32_t length;
 };
 
-struct partition_struct* partition_open(device_read_t device_read, device_read_interval_t device_read_interval, device_write_t device_write, int8_t index);
+int partition_open(struct partition_struct* partition, device_read_t device_read, device_read_interval_t device_read_interval, device_write_t device_write, int8_t index);
 uint8_t partition_close(struct partition_struct* partition);
 
 /**

@@ -8,7 +8,6 @@
 #include "sd_raw.h"
 #include "LPC214x.h"
 #include <stdio.h>
-#include "rprintf.h"
 
 /**
  * \addtogroup sd_raw MMC/SD card raw access
@@ -176,9 +175,7 @@ unsigned char sd_raw_init()
 
     /* initialization procedure */
 
-    if(!sd_raw_available())
-    {
-        rprintf("SD RAW NOT AVAILABLE\n\r");
+    if(!sd_raw_available()) {
         return 0;
     }
     configure_pin_ss();
@@ -186,8 +183,7 @@ unsigned char sd_raw_init()
 
     unsigned short i;
     /* card needs 74 cycles minimum to start up */
-    for(i = 0; i < 10; ++i)
-    {
+    for(i = 0; i < 10; ++i) {
         /* wait 8 clock cycles */
         sd_raw_rec_byte();
     }
@@ -203,9 +199,7 @@ unsigned char sd_raw_init()
         if(response == (1 << R1_IDLE_STATE))
             break;
 
-        if(i == 0x1ff)
-        {
-            rprintf("\n\rresponse: %d\n\r",response);
+        if(i == 0x1ff) {
             unselect_card();
             return 0;
         }
@@ -218,19 +212,15 @@ unsigned char sd_raw_init()
         if(!(response & (1 << R1_IDLE_STATE)))
             break;
 
-        if(i == 0x7fff)
-        {
+        if(i == 0x7fff) {
             unselect_card();
-            rprintf("i = 0x7fff\n\r");
             return 0;
         }
     }
 
     /* set block size to 512 bytes */
-    if(sd_raw_send_command_r1(CMD_SET_BLOCKLEN, 512))
-    {
+    if(sd_raw_send_command_r1(CMD_SET_BLOCKLEN, 512)) {
         unselect_card();
-        rprintf("BLOCK SIZE SET ERR \n\r");
         return 0;
     }
 
@@ -238,7 +228,7 @@ unsigned char sd_raw_init()
     unselect_card();
 
     /* switch to highest SPI frequency possible */
-    S0SPCCR = 60; /* ~1MHz-- potentially can be faster */
+    S0SPCCR = 10; /* ~1MHz-- potentially can be faster */
 
     #if !SD_RAW_SAVE_RAM
         /* the first block is likely to be accessed first, so precache it here */
@@ -246,9 +236,7 @@ unsigned char sd_raw_init()
         #if SD_RAW_WRITE_BUFFERING
         raw_block_written = 1;
     #endif
-    if(!sd_raw_read(0, raw_block, sizeof(raw_block)))
-    {
-        rprintf("sd_raw_read borks\n\r");
+    if(!sd_raw_read(0, raw_block, sizeof(raw_block))) {
         return 0;
     }
     #endif
@@ -617,102 +605,87 @@ unsigned char sd_raw_read_interval(unsigned int offset, unsigned char* buffer, u
  * \returns 0 on failure, 1 on success.
  * \see sd_raw_read
  */
-unsigned char sd_raw_write(unsigned int offset, const unsigned char* buffer, unsigned short length)
-{
-    #if SD_RAW_WRITE_SUPPORT
+unsigned char sd_raw_write(unsigned int offset, const unsigned char* buffer, unsigned short length) {
+#if SD_RAW_WRITE_SUPPORT
     
-        if(get_pin_locked())
-            return 0;
+  if(get_pin_locked()) return 0;
     
-        unsigned int block_address;
-        unsigned short block_offset;
-        unsigned short write_length;
-        while(length > 0)
-        {
-            /* determine byte count to write at once */
-            block_address = offset & 0xfffffe00;
-            block_offset = offset & 0x01ff;
-            write_length = 512 - block_offset; /* write up to block border */
-            if(write_length > length)
-                write_length = length;
+  unsigned int block_address;
+  unsigned short block_offset;
+  unsigned short write_length;
+  while(length > 0) {
+    /* determine byte count to write at once */
+    block_address = offset & 0xfffffe00;
+    block_offset = offset & 0x01ff;
+    write_length = 512 - block_offset; /* write up to block border */
+    if(write_length > length) write_length = length;
     
-            /* Merge the data to write with the content of the block.
-                     * Use the cached block if available.
-                     */
-            if(block_address != raw_block_address)
-            {
-                #if SD_RAW_WRITE_BUFFERING
-                if(!raw_block_written)
-                {
-                    if(!sd_raw_write(raw_block_address, raw_block, sizeof(raw_block)))
-                        return 0;
-                }
-            #endif
-
-            if(block_offset || write_length < 512)
-            {
-                if(!sd_raw_read(block_address, raw_block, sizeof(raw_block)))
-                    return 0;
-            }
-            raw_block_address = block_address;
-        }
-
-        if(buffer != raw_block)
-        {
-            memcpy(raw_block + block_offset, buffer, write_length);
-
-            #if SD_RAW_WRITE_BUFFERING
-                raw_block_written = 0;
-    
-                if(length == write_length)
-                    return 1;
-            #endif
-        }
-
-        buffer += write_length;
-
-        /* address card */
-        select_card();
-
-        /* send single block request */
-        if(sd_raw_send_command_r1(CMD_WRITE_SINGLE_BLOCK, block_address))
-        {
-            unselect_card();
-            return 0;
-        }
-
-        /* send start byte */
-        sd_raw_send_byte(0xfe);
-
-        /* write byte block */
-        unsigned char* cache = raw_block;
-        unsigned short i;
-        for(i = 0; i < 512; ++i)
-            sd_raw_send_byte(*cache++);
-
-        /* write dummy crc16 */
-        sd_raw_send_byte(0xff);
-        sd_raw_send_byte(0xff);
-
-        /* wait while card is busy */
-        while(sd_raw_rec_byte() != 0xff);
-        sd_raw_rec_byte();
-
-        /* deaddress card */
-        unselect_card();
-
-        length -= write_length;
-        offset += write_length;
-
-        #if SD_RAW_WRITE_BUFFERING
-            raw_block_written = 1;
-        #endif
+    /* Merge the data to write with the content of the block.
+     * Use the cached block if available.
+     */
+    if(block_address != raw_block_address) {
+#if SD_RAW_WRITE_BUFFERING
+      if(!raw_block_written) {
+        if(!sd_raw_write(raw_block_address, raw_block, sizeof(raw_block))) return 0;
+      }
+#endif
+      if(block_offset || write_length < 512) {
+        if(!sd_raw_read(block_address, raw_block, sizeof(raw_block))) return 0;
+      }
+      raw_block_address = block_address;
     }
 
-    return 1;
-    #else
-        return 0;
-    #endif
+    if(buffer != raw_block) {
+      memcpy(raw_block + block_offset, buffer, write_length);
+ 
+#if SD_RAW_WRITE_BUFFERING
+      raw_block_written = 0;
+      if(length == write_length) return 1;
+#endif
+    }
+
+    buffer += write_length;
+
+    /* address card */
+    select_card();
+
+    /* send single block request */
+    if(sd_raw_send_command_r1(CMD_WRITE_SINGLE_BLOCK, block_address)) {
+      unselect_card();
+      return 0;
+    }
+
+    /* send start byte */
+    sd_raw_send_byte(0xfe);
+
+    /* write byte block */
+    unsigned char* cache = raw_block;
+    unsigned short i;
+    for(i = 0; i < 512; ++i) sd_raw_send_byte(*cache++);
+
+    /* write dummy crc16 */
+    sd_raw_send_byte(0xff);
+    sd_raw_send_byte(0xff);
+
+    /* wait while card is busy */
+    while(sd_raw_rec_byte() != 0xff);
+    sd_raw_rec_byte();
+
+    /* deaddress card */
+    unselect_card();
+
+    length -= write_length;
+    offset += write_length;
+
+#if SD_RAW_WRITE_BUFFERING
+    raw_block_written = 1;
+#endif
+  }
+
+  return 1;
+#else
+  return 0;
+#endif
 }
 
 /**
@@ -869,104 +842,40 @@ unsigned char sd_raw_get_info(struct sd_raw_info* info)
     return 1;
 }
 
+int sd_raw_get_cid_csd(char* info) {
+  if(!info || !sd_raw_available()) return 0;
+
+  select_card();
+
+  /* read cid register */
+  if(sd_raw_send_command_r1(CMD_SEND_CID, 0)) {
+    unselect_card();
+    return 1;
+  }
+  while(sd_raw_rec_byte() != 0xfe);
+  unsigned char i;
+  for(i = 0; i < 18; ++i) {
+    info[i]= sd_raw_rec_byte();
+  }
+
+  /* read csd register */
+  if(sd_raw_send_command_r1(CMD_SEND_CSD, 0)) {
+    unselect_card();
+    return 2;
+  }
+  while(sd_raw_rec_byte() != 0xfe);
+  for(i = 0; i < 18; ++i) {
+    info[i+18]=sd_raw_rec_byte();
+  }
+
+  unselect_card();
+
+  return 3;
+}
+
 void SDoff(void)
 {
     SPI_SS_IODIR &= ~(1<<SPI_SS_PIN);
     PINSEL0 &= ~(0x1500);
 }
 
-//NES : 10-28-7 
-//Low-level formats a 512MB card
-//Assumes *many* things
-//You must pass this fuction 0xAA to get it to work (safety check)
-char format_card(char make_sure)
-{
-	#define MBR_LOCATION	0x00
-	#define BR_LOCATION		(MBR_LOCATION+0x80000)
-	#define FAT_TABLE		(BR_LOCATION + (0x200 * 512))
-	#define ROOT_DIR		(BR_LOCATION + (0x0200 * 512) + (0x00F5 * 2 * 512))
-
-	//Safety check
-	if (make_sure != 0xAA) return 0;
-	
-	int i;
-	unsigned char my_buff[512];
-	for(i = 0 ; i < 512 ; i++) my_buff[i] = 0x00;
-	
-	//Init SD card interface
-	sd_raw_init();
-
-	//Erase Master Boot record
-	sd_raw_sync();
-	sd_raw_write(MBR_LOCATION, my_buff, 512);
-
-	//Erase Boot record
-	sd_raw_sync();
-	sd_raw_write(BR_LOCATION, my_buff, 512);
-
-	//Erase FAT tables
-	for(i = 0 ; i < 0x00F5 ; i++) //0x00F5 = 245 bytes : comes from byte 0x16 from Boot Record
-	{
-		sd_raw_sync();
-		sd_raw_write( (FAT_TABLE + (i*512)), my_buff, 512);
-	}
-	
-	//Write Master Boot Record
-	#define PART1	0x01BE
-	my_buff[PART1 + 0] = 0x00;
-	my_buff[PART1 + 1] = 0x00;
-	my_buff[PART1 + 2] = 0x01;
-	my_buff[PART1 + 3] = 0x01;
-	my_buff[PART1 + 4] = 0x06;
-	my_buff[PART1 + 5] = 0x1F;
-	my_buff[PART1 + 6] = 0xE0;
-	my_buff[PART1 + 7] = 0xD3;
-	my_buff[PART1 + 8] = 0x00;
-	my_buff[PART1 + 9] = 0x04;
-	my_buff[PART1 + 10] = 0x00;
-	my_buff[PART1 + 11] = 0x00;
-	my_buff[PART1 + 12] = 0x00;
-	my_buff[PART1 + 13] = 0x4C;
-	my_buff[PART1 + 14] = 0x0F;
-	my_buff[510] = 0x55;
-	my_buff[511] = 0xAA;
-
-	sd_raw_sync();
-	sd_raw_write(MBR_LOCATION, my_buff, 512);
-	sd_raw_sync();
-
-	//Write Boot Record
-	#define BOOTRECORD1	0x80000
-	my_buff[0] = 0xEB;
-	my_buff[1] = 0xFE;
-	my_buff[2] = 0x90;
-	my_buff[12] = 0x02;
-	my_buff[13] = 0x10;
-	my_buff[14] = 0x16;
-	my_buff[16] = 0x02;
-	my_buff[18] = 0x02;
-	my_buff[21] = 0xF8;
-	my_buff[22] = 0xF5;
-	my_buff[24] = 0x20;
-	my_buff[26] = 0x20;
-	my_buff[29] = 0x04;
-	my_buff[33] = 0x4C;
-	my_buff[34] = 0x0F;
-	my_buff[38] = 0x29;
-	my_buff[54] = 0x46;
-	my_buff[55] = 0x41;
-	my_buff[56] = 0x54;
-	my_buff[57] = 0x31;
-	my_buff[58] = 0x36;
-	my_buff[59] = 0x20;
-	my_buff[60] = 0x20;
-	my_buff[61] = 0x20;
-	my_buff[510] = 0x55;
-	my_buff[511] = 0xAA;
-	
-	sd_raw_sync();
-	sd_raw_write(BR_LOCATION, my_buff, 512);
-	sd_raw_sync();
-	
-	return(0x55); //Successful format
-}

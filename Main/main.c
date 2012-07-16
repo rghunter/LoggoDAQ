@@ -1,110 +1,76 @@
 /*********************************************************************************
- * Logomatic V2 Firmware
- * Sparkfun Electronics 2008
+ * Logomatic Version Kwan Firmware
+ * Modified beyond recognition from original 2008 Sparkfun firmware
+ * Kwan Systems 2009
  * ******************************************************************************/
 
 /*******************************************************
- * 		     Header Files
+ *          Header Files
  ******************************************************/
 #include <stdio.h>
 #include <string.h>
-#include "LPC21xx.h"
+#include "LPC214x.h"
 
-//Data Streaming
-
-//UART0 Debugging
-#include "serial.h"
-#include "rprintf.h"
-
-//Needed for main function calls
-#include "main_msc.h"
-#include "fat16.h"
-#include "armVIC.h"
-#include "itoa.h"
-#include "rootdir.h"
-#include "sd_raw.h"
-
+//Main application subfiles
+#include "setup.h"
+#include "loop.h"
+#include "main.h"
+#include "conparse.h"
 
 /*******************************************************
- * 		     Global Variables
+ *            MAIN
+ * Arduino-style structure here
  ******************************************************/
 
-#define ON	1
-#define OFF	0
-
+int main (void) {
+  setup();
+  for(;;) loop();
+}
 
 /*******************************************************
- * 		 Function Declarations
+ *          Utility functions
  ******************************************************/
+ 
+static int light_mask[3]={0x00000004,0x00000800,0x80000000};
 
-void Initialize(void);
-
-void delay_ms(int count);
-
-
-/*******************************************************
- * 		     	MAIN
- ******************************************************/
-
-int main (void)
-{
-	int i;
-	Initialize();
-	// Flash Status Lights
-	while(1)
-	{
-		for(i = 0; i < 5; i++)
-		{
-			stat(0,ON);
-			delay_ms(50);
-			stat(0,OFF);
-			stat(1,ON);
-			delay_ms(50);
-			stat(1,OFF);
-		}
-	}
-	
-    	return 0;
+void set_light(int statnum, int onoff) {
+  if(onoff & !powerSave){ 
+    //on 
+    IOCLR0 = light_mask[statnum]; 
+  } else { 
+    // Off
+    IOSET0 = light_mask[statnum]; 
+  } 
 }
 
-
-/*******************************************************
- * 		     Initialize
- ******************************************************/
-
-#define PLOCK 0x400
-
-void Initialize(void)
-{
-	rprintf_devopen(putc_serial0);
-	
-	PINSEL0 = 0xCF351505;
-	PINSEL1 = 0x15441801;
-	IODIR0 |= 0x00000884;
-	IOSET0 = 0x00000080;
-
-	S0SPCR = 0x08;  // SPI clk to be pclk/8
-	S0SPCR = 0x30;  // master, msb, first clk edge, active high, no ints
-
-}
-void stat(int statnum, int onoff)
-{
-	if(statnum) // Stat 1
-	{
-		if(onoff){ IOCLR0 = 0x00000800; } // On
-		else { IOSET0 = 0x00000800; } // Off
-	}
-	else // Stat 0 
-	{
-		if(onoff){ IOCLR0 = 0x00000004; } // On
-		else { IOSET0 = 0x00000004; } // Off
-	}
-}
-void delay_ms(int count)
-{
-	int i;
-	count *= 10000;
-	for(i = 0; i < count; i++)
-		asm volatile ("nop");
+void blinklock(int maintainWatchdog, int blinkcode) {
+  if(blinkcode==0) {
+    for(;;) {
+      set_light(0,ON);
+      delay_ms(50);
+      set_light(0,OFF);
+      set_light(1,ON);
+      delay_ms(50);
+      set_light(1,OFF);
+    }
+  } else {
+    for(;;) {
+      for(int i=0;i<blinkcode;i++) {
+        set_light(0,ON);
+        delay_ms(250);
+        set_light(0,OFF);
+        delay_ms(250);
+      }
+      set_light(1,ON);
+      delay_ms(250);
+      set_light(1,OFF);
+      delay_ms(250);
+    }
+  }
 }
 
+void delay_ms(int count) {
+  int i;
+  count *= 10000;
+  for(i = 0; i < count; i++) asm volatile ("nop");
+}

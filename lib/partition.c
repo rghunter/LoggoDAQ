@@ -41,16 +41,16 @@
  * \returns 0 on failure, a partition descriptor on success.
  * \see partition_close
  */
-struct partition_struct* partition_open(device_read_t device_read, device_read_interval_t device_read_interval, device_write_t device_write, int8_t index0)
-{
-    struct partition_struct* new_partition = 0;
+int partition_open(struct partition_struct* new_partition, device_read_t device_read, device_read_interval_t device_read_interval, device_write_t device_write, int8_t index0) {
+    /* allocate partition descriptor */
+    if(!new_partition)
+        return 0;
     uint8_t buffer[0x10];
 
     if(!device_read || !device_read_interval || index0 >= 4)
         return 0;
 
-    if(index0 >= 0)
-    {
+    if(index0 >= 0) {
         /* read specified partition table index */
         if(!device_read(0x01be + index0 * 0x10, buffer, sizeof(buffer)))
             return 0;
@@ -60,10 +60,6 @@ struct partition_struct* partition_open(device_read_t device_read, device_read_i
             return 0;
     }
 
-    /* allocate partition descriptor */
-    new_partition = malloc(sizeof(*new_partition));
-    if(!new_partition)
-        return 0;
     memset(new_partition, 0, sizeof(*new_partition));
 
     /* fill partition descriptor */
@@ -71,8 +67,7 @@ struct partition_struct* partition_open(device_read_t device_read, device_read_i
     new_partition->device_read_interval = device_read_interval;
     new_partition->device_write = device_write;
 
-    if(index0 >= 0)
-    {
+    if(index0 >= 0) {
         new_partition->type = buffer[4];
         new_partition->offset = ((uint32_t) buffer[8]) |
                                 ((uint32_t) buffer[9] << 8) |
@@ -82,13 +77,11 @@ struct partition_struct* partition_open(device_read_t device_read, device_read_i
                                 ((uint32_t) buffer[13] << 8) |
                                 ((uint32_t) buffer[14] << 16) |
                                 ((uint32_t) buffer[15] << 24);
-    }
-    else
-    {
+    } else {
         new_partition->type = 0xff;
     }
 
-    return new_partition;
+    return 1;
 }
 
 /**
@@ -109,7 +102,7 @@ uint8_t partition_close(struct partition_struct* partition)
         return 0;
 
     /* destroy partition descriptor */
-    free(partition);
+    memset(partition, 0, sizeof(*partition));
 
     return 1;
 }

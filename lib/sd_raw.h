@@ -123,6 +123,7 @@ unsigned char sd_raw_write(unsigned int offset, const unsigned char* buffer, uns
 unsigned char sd_raw_sync(void);
 
 unsigned char sd_raw_get_info(struct sd_raw_info* info);
+int sd_raw_get_cid_csd(char* info);
 void SDoff(void);
 
 char format_card(char make_sure);

@@ -10,7 +10,7 @@ FLASH_TOOL = LPC12
 
 # MCU name and submodel
 MCU      = arm7tdmi-s
-SUBMDL   = LPC2138
+SUBMDL   = LPC2148
 #THUMB    = -mthumb
 
 #This is needed to run IAP function call stuff
@@ -35,11 +35,24 @@ TARGET = main
 # List C source files here. (C dependencies are automatically generated.)
 # use file-extension c for "c-only"-files
 SRC = $(TARGET).c 
+SRC += gps.c
+SRC += uart.c
+SRC += adc.c
+SRC += sdbuf.c
+SRC += conparse.c
+SRC += load.c
+SRC += setup.c
+SRC += loop.c
+SRC += command.c
+SRC += stringex.c
+SRC += circular.c
+SRC += sirfwrite.c
+SRC += nmeawrite.c
+SRC += debug.c
+SRC += armVIC.c
 
 #Needed most of the time for basic functions
 SRC += $(LIBPATH)syscalls.c 
-SRC += $(LIBPATH)rprintf.c 
-SRC += $(LIBPATH)string_printf.c 
 SRC += $(LIBPATH)serial.c 
 
 #Functions for SD interaction
@@ -50,22 +63,15 @@ SRC += $(LIBPATH)partition.c
 SRC += $(LIBPATH)itoa.c
 
 #Functions for USB Mass Storage Device
-SRC += $(USBPATH)main_msc.c 
-SRC += $(USBPATH)msc_bot.c 
-SRC += $(USBPATH)msc_scsi.c 
-SRC += $(USBPATH)blockdev_sd.c 
-SRC += $(USBPATH)lpc2000_spi.c
-SRC += $(USBPATH)usbinit.c 
-SRC += $(USBPATH)usbhw_lpc.c 
-SRC += $(USBPATH)usbcontrol.c 
-SRC += $(USBPATH)usbstdreq.c
-SRC += $(USBPATH)armVIC.c
-
-#I2C bitbang library
-
-SRC += $(LIBPATH)twowire.c
-SRC += $(LIBPATH)setup.c
-SRC += $(LIBPATH)conparse.c
+#SRC += $(USBPATH)main_msc.c 
+#SRC += $(USBPATH)msc_bot.c 
+#SRC += $(USBPATH)msc_scsi.c 
+#SRC += $(USBPATH)blockdev_sd.c 
+#SRC += $(USBPATH)lpc2000_spi.c
+#SRC += $(USBPATH)usbinit.c 
+#SRC += $(USBPATH)usbhw_lpc.c 
+#SRC += $(USBPATH)usbcontrol.c 
+#SRC += $(USBPATH)usbstdreq.c
 
 # List C source files here which must be compiled in ARM-Mode.
 # use file-extension c for "c-only"-files
@@ -122,7 +128,6 @@ DEBUG = dwarf-2
 #     Each directory must be seperated by a space.
 EXTRAINCDIRS = $(IN2_COMMON)/lib
 EXTRAINCDIRS += $(IN2_COMMON)/screens
-EXTRAINCDIRS += $(IN2_COMMON)/LPCUSB
 EXTRAINCDIRS += /home/rghunter/toolchains/arm-2011.03/arm-none-eabi/include
 
 # List any extra directories to look for library files here.
@@ -412,6 +417,7 @@ FW.SFE: main.elf
 	@echo
 	@echo $(MSG_FLASH) $@
 	$(OBJCOPY) -O binary $< $@
+	$(COPY) $@ f:\
 
 
 # Create extended listing file from ELF output file.
@@ -442,6 +448,8 @@ FW.SFE: main.elf
 $(COBJ) : %.o : %.c
 	@echo
 	@echo $(MSG_COMPILING) $<
+#	$(CC) -E $(THUMB) $(ALL_CFLAGS) $(CONLYFLAGS) $< -o $(<:.c=.e)
+#	$(CC) -S $(THUMB) $(ALL_CFLAGS) $(CONLYFLAGS) $< -o $(<:.c=.s)
 	$(CC) -c $(THUMB) $(ALL_CFLAGS) $(CONLYFLAGS) $< -o $@ 
 
 # Compile: create object files from C source files. ARM-only
@@ -512,12 +520,16 @@ clean_list :
 	$(REMOVE) $(LST)
 	$(REMOVE) $(SRC:.c=.s)
 	$(REMOVE) $(SRC:.c=.d)
+	$(REMOVE) $(SRC:.c=.e)
 	$(REMOVE) $(SRCARM:.c=.s)
 	$(REMOVE) $(SRCARM:.c=.d)
+	$(REMOVE) $(SRCARM:.c=.e)
 	$(REMOVE) $(CPPSRC:.cpp=.s) 
 	$(REMOVE) $(CPPSRC:.cpp=.d)
+	$(REMOVE) $(CPPSRC:.cpp=.e)
 	$(REMOVE) $(CPPSRCARM:.cpp=.s) 
 	$(REMOVE) $(CPPSRCARM:.cpp=.d)
+	$(REMOVE) $(CPPSRCARM:.cpp=.e)
 	$(REMOVE) FW.SFE
 	$(REMOVE) .dep/*
 

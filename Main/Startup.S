@@ -208,7 +208,7 @@ Top_Stack:
 */
 //        .set MAM_SETUP,    1
         .set MAMCR_Val,    0x00000002
-        .set MAMTIM_Val,   0x00000004
+        .set MAMTIM_Val,   0x00000003
 
 
 // Starupt Code must be linked first at Address at which it expects to run.
@@ -324,7 +324,9 @@ __startup:
 Reset_Handler:  
 
 
-// Memory Mapping
+// Memory Mapping: If any exceptions happen between now and when table is copied, there's trouble. On reset,
+//                 interrupts are disabled so only illegal instructions cause exceptions, but this is the
+//                 main firmware and there is no promise that interrupts are disabled
                 .set MEMMAP, 0xE01FC040  /* Memory Mapping Control */
 
 .if (REMAP)
@@ -343,35 +345,37 @@ Reset_Handler:
 // Setup Stack for each mode
                 LDR     R0, =Top_Stack
 
-// Enter Undefined Instruction Mode and set its Stack Pointer
+// Enter Undefined Instruction Mode (ints disabled) and set its Stack Pointer
                 MSR     CPSR_c, #Mode_UND|I_Bit|F_Bit
                 MOV     SP, R0
                 SUB     R0, R0, #UND_Stack_Size
 
-// Enter Abort Mode and set its Stack Pointer
+// Enter Abort Mode (ints disabled) and set its Stack Pointer
                 MSR     CPSR_c, #Mode_ABT|I_Bit|F_Bit
                 MOV     SP, R0
                 SUB     R0, R0, #ABT_Stack_Size
 
-// Enter FIQ Mode and set its Stack Pointer
+// Enter FIQ Mode (ints disabled) and set its Stack Pointer
                 MSR     CPSR_c, #Mode_FIQ|I_Bit|F_Bit
                 MOV     SP, R0
                 SUB     R0, R0, #FIQ_Stack_Size
 
-// Enter IRQ Mode and set its Stack Pointer
+// Enter IRQ Mode (ints disabled) and set its Stack Pointer
                 MSR     CPSR_c, #Mode_IRQ|I_Bit|F_Bit
                 MOV     SP, R0
                 SUB     R0, R0, #IRQ_Stack_Size
 
-// Enter Supervisor Mode and set its Stack Pointer
+// Enter Supervisor Mode (ints disabled) and set its Stack Pointer
                 MSR     CPSR_c, #Mode_SVC|I_Bit|F_Bit
                 MOV     SP, R0
                 SUB     R0, R0, #SVC_Stack_Size
 
-// Enter User Mode and set its Stack Pointer
+// Enter System Mode and set its Stack Pointer
                 MSR     CPSR_c, #Mode_SYS /* Interrupts enabled */
 //				MSR     CPSR_c, #Mode_USR|I_Bit|F_Bit /* Interrupts disabled */
                 MOV     SP, R0
+                
+//Now stay in system mode for good                
 
 
 .if (RAM_MODE==0)
@@ -414,7 +418,8 @@ ctor_loop:
 		B 		ctor_loop
 ctor_end:
 
-// Enter the C code
+// Enter the C code. If main() ever returns, set up the link register
+//                     so that it returns to an infinite loop.
                 //LDR     R0,=INIT
                 LDR     R0,=main
                 TST     R0,#1             // Bit-0 set: main is Thumb

@@ -78,8 +78,7 @@ void write_to_flash(char* settings_buffer_ptr)
 }
 
 //Prints the current serial number
-void read_serialnumber(void)
-{
+void read_serialnumber(void) {
 	char *serialnumber;
 	serialnumber = (char*)SERIALNUMBER_START;
 

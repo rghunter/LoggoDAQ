@@ -66,7 +66,7 @@
  *
  * \note This option has no effect when SD_RAW_WRITE_SUPPORT is 0.
  */
-#define SD_RAW_WRITE_BUFFERING 1
+#define SD_RAW_WRITE_BUFFERING 0
 
 /**
  * \ingroup sd_raw_config

@@ -11,7 +11,6 @@
 #include "LPC214x.h"            /* LPC23XX Peripheral Registers */
 #include "type.h"
 #include "irq.h"
-#include "rprintf.h"
 
 /******************************************************************************
 ** Function name:       DefaultVICHandler
@@ -35,7 +34,6 @@ static void DefaultVICHandler (void)
         condition. For debugging, use this endless loop to trace back. */
     /* For more details, see Philips appnote AN10414 */
     VICVectAddr = 0;        /* Acknowledge Interrupt */
-    rprintf("\nDefault VIC Stop");
     while ( 1 );
 }
 

@@ -231,6 +231,20 @@ Reset, and Code Security/Debugging */
 #define U1FDR          (*(volatile unsigned long *)(UART1_BASE_ADDR + 0x28))
 #define U1TER          (*(volatile unsigned long *)(UART1_BASE_ADDR + 0x30))
 
+#define URBR(port)          (*((volatile unsigned char *) (0xE000C000+(port)*0x4000)))
+#define UTHR(port)          (*((volatile unsigned char *) (0xE000C000+(port)*0x4000)))
+#define UIER(port)          (*((volatile unsigned char *) (0xE000C004+(port)*0x4000)))
+#define UIIR(port)          (*((volatile unsigned char *) (0xE000C008+(port)*0x4000)))
+#define UFCR(port)          (*((volatile unsigned char *) (0xE000C008+(port)*0x4000)))
+#define ULCR(port)          (*((volatile unsigned char *) (0xE000C00C+(port)*0x4000)))
+#define UMCR(port)          (*((volatile unsigned char *) (0xE000C010+(port)*0x4000)))
+#define ULSR(port)          (*((volatile unsigned char *) (0xE000C014+(port)*0x4000)))
+#define UMSR(port)          (*((volatile unsigned char *) (0xE000C018+(port)*0x4000)))
+#define USCR(port)          (*((volatile unsigned char *) (0xE000C01C+(port)*0x4000)))
+#define UFDR(port)          (*((volatile unsigned char *) (0xE000C028+(port)*0x4000)))
+#define UDLL(port)          (*((volatile unsigned char *) (0xE000C000+(port)*0x4000)))
+#define UDLM(port)          (*((volatile unsigned char *) (0xE000C004+(port)*0x4000)))
+
 /* I2C Interface 0 */
 #define I2C0_BASE_ADDR		0xE001C000
 #define I20CONSET      (*(volatile unsigned long *)(I2C0_BASE_ADDR + 0x00))
