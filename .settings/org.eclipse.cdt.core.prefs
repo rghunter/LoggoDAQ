@@ -1,3 +1,0 @@
-#Mon Jul 16 15:36:49 EDT 2012
-eclipse.preferences.version=1
-environment/project/cdt.managedbuild.toolchain.gnu.cross.base.1826025375=<?xml version\="1.0" encoding\="UTF-8" standalone\="no"?>\n<environment append\="true" appendContributed\="true">\n<variable delimiter\="\:" name\="PATH" operation\="replace" value\="/bin\:/usr/lib/lightdm/lightdm\:/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/usr/games\:/home/rghunter/toolchains/arm-2011.03/bin"/>\n</environment>\n
