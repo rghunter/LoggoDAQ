@@ -1,0 +1,541 @@
+   1              		.cpu arm7tdmi-s
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 4
+  10              		.eabi_attribute 34, 0
+  11              		.eabi_attribute 18, 4
+  12              		.file	"main_msc.c"
+  13              		.text
+  14              	.Ltext0:
+  15              		.cfi_sections	.debug_frame
+  16              		.align	2
+  18              	HandleClassRequest:
+  19              	.LFB0:
+  20              		.file 1 "../LPCUSB/main_msc.c"
+   1:../LPCUSB/main_msc.c **** /*
+   2:../LPCUSB/main_msc.c ****     LPCUSB, an USB device driver for LPC microcontrollers
+   3:../LPCUSB/main_msc.c ****     Copyright (C) 2006 Bertrik Sikken (bertrik@sikken.nl)
+   4:../LPCUSB/main_msc.c **** 
+   5:../LPCUSB/main_msc.c ****     This library is free software; you can redistribute it and/or
+   6:../LPCUSB/main_msc.c ****     modify it under the terms of the GNU Lesser General Public
+   7:../LPCUSB/main_msc.c ****     License as published by the Free Software Foundation; either
+   8:../LPCUSB/main_msc.c ****     version 2.1 of the License, or (at your option) any later version.
+   9:../LPCUSB/main_msc.c **** 
+  10:../LPCUSB/main_msc.c ****     This library is distributed in the hope that it will be useful,
+  11:../LPCUSB/main_msc.c ****     but WITHOUT ANY WARRANTY; without even the implied warranty of
+  12:../LPCUSB/main_msc.c ****     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  13:../LPCUSB/main_msc.c ****     Lesser General Public License for more details.
+  14:../LPCUSB/main_msc.c **** 
+  15:../LPCUSB/main_msc.c ****     You should have received a copy of the GNU Lesser General Public
+  16:../LPCUSB/main_msc.c ****     License along with this library; if not, write to the Free Software
+  17:../LPCUSB/main_msc.c ****     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+  18:../LPCUSB/main_msc.c **** */
+  19:../LPCUSB/main_msc.c **** 
+  20:../LPCUSB/main_msc.c **** 
+  21:../LPCUSB/main_msc.c **** #include "main_msc.h"
+  22:../LPCUSB/main_msc.c **** #include "type.h"
+  23:../LPCUSB/main_msc.c **** 
+  24:../LPCUSB/main_msc.c **** #include <stdio.h>
+  25:../LPCUSB/main_msc.c **** #include "rprintf.h"
+  26:../LPCUSB/main_msc.c **** 
+  27:../LPCUSB/main_msc.c **** #include "LPC214x.h"
+  28:../LPCUSB/main_msc.c **** #include "usbapi.h"
+  29:../LPCUSB/main_msc.c **** #include "usbdebug.h"
+  30:../LPCUSB/main_msc.c **** 
+  31:../LPCUSB/main_msc.c **** #include "msc_bot.h"
+  32:../LPCUSB/main_msc.c **** #include "blockdev.h"
+  33:../LPCUSB/main_msc.c **** 
+  34:../LPCUSB/main_msc.c **** #define BAUD_RATE   115200
+  35:../LPCUSB/main_msc.c **** 
+  36:../LPCUSB/main_msc.c **** #define MAX_PACKET_SIZE 64
+  37:../LPCUSB/main_msc.c **** 
+  38:../LPCUSB/main_msc.c **** #define LE_WORD(x)      ((x)&0xFF),((x)>>8)
+  39:../LPCUSB/main_msc.c **** 
+  40:../LPCUSB/main_msc.c **** static U8 abClassReqData[4];
+  41:../LPCUSB/main_msc.c **** 
+  42:../LPCUSB/main_msc.c **** //static const U8 abDescriptors[] =
+  43:../LPCUSB/main_msc.c **** static U8 abDescriptors[] =
+  44:../LPCUSB/main_msc.c **** {
+  45:../LPCUSB/main_msc.c **** 
+  46:../LPCUSB/main_msc.c ****     // device descriptor
+  47:../LPCUSB/main_msc.c ****     0x12,
+  48:../LPCUSB/main_msc.c ****     DESC_DEVICE,
+  49:../LPCUSB/main_msc.c ****     LE_WORD(0x0200),        // bcdUSB
+  50:../LPCUSB/main_msc.c ****     0x00,                   // bDeviceClass
+  51:../LPCUSB/main_msc.c ****     0x00,                   // bDeviceSubClass
+  52:../LPCUSB/main_msc.c ****     0x00,                   // bDeviceProtocol
+  53:../LPCUSB/main_msc.c ****     MAX_PACKET_SIZE0,       // bMaxPacketSize
+  54:../LPCUSB/main_msc.c ****     LE_WORD(0x1b4f),        // idVendor
+  55:../LPCUSB/main_msc.c ****     LE_WORD(0x0001),        // idProduct
+  56:../LPCUSB/main_msc.c ****     LE_WORD(0x0100),        // bcdDevice
+  57:../LPCUSB/main_msc.c ****     0x01,                   // iManufacturer
+  58:../LPCUSB/main_msc.c ****     0x02,                   // iProduct
+  59:../LPCUSB/main_msc.c ****     0x03,                   // iSerialNumber
+  60:../LPCUSB/main_msc.c ****     0x01,                   // bNumConfigurations
+  61:../LPCUSB/main_msc.c **** 
+  62:../LPCUSB/main_msc.c ****     // configuration descriptor
+  63:../LPCUSB/main_msc.c ****     0x09,
+  64:../LPCUSB/main_msc.c ****     DESC_CONFIGURATION,
+  65:../LPCUSB/main_msc.c ****     LE_WORD(32),            // wTotalLength
+  66:../LPCUSB/main_msc.c ****     0x01,                   // bNumInterfaces
+  67:../LPCUSB/main_msc.c ****     0x01,                   // bConfigurationValue
+  68:../LPCUSB/main_msc.c ****     0x00,                   // iConfiguration
+  69:../LPCUSB/main_msc.c ****     0xC0,                   // bmAttributes
+  70:../LPCUSB/main_msc.c ****     0x32,                   // bMaxPower
+  71:../LPCUSB/main_msc.c **** 
+  72:../LPCUSB/main_msc.c ****     // interface
+  73:../LPCUSB/main_msc.c ****     0x09,
+  74:../LPCUSB/main_msc.c ****     DESC_INTERFACE,
+  75:../LPCUSB/main_msc.c ****     0x00,                   // bInterfaceNumber
+  76:../LPCUSB/main_msc.c ****     0x00,                   // bAlternateSetting
+  77:../LPCUSB/main_msc.c ****     0x02,                   // bNumEndPoints
+  78:../LPCUSB/main_msc.c ****     0x08,                   // bInterfaceClass = mass storage
+  79:../LPCUSB/main_msc.c ****     0x06,                   // bInterfaceSubClass = transparent SCSI
+  80:../LPCUSB/main_msc.c ****     0x50,                   // bInterfaceProtocol = BOT
+  81:../LPCUSB/main_msc.c ****     0x00,                   // iInterface
+  82:../LPCUSB/main_msc.c ****     // EP
+  83:../LPCUSB/main_msc.c ****     0x07,
+  84:../LPCUSB/main_msc.c ****     DESC_ENDPOINT,
+  85:../LPCUSB/main_msc.c ****     MSC_BULK_IN_EP,         // bEndpointAddress
+  86:../LPCUSB/main_msc.c ****     0x02,                   // bmAttributes = bulk
+  87:../LPCUSB/main_msc.c ****     LE_WORD(MAX_PACKET_SIZE),// wMaxPacketSize
+  88:../LPCUSB/main_msc.c ****     0x00,                   // bInterval
+  89:../LPCUSB/main_msc.c ****     // EP
+  90:../LPCUSB/main_msc.c ****     0x07,
+  91:../LPCUSB/main_msc.c ****     DESC_ENDPOINT,
+  92:../LPCUSB/main_msc.c ****     MSC_BULK_OUT_EP,        // bEndpointAddress
+  93:../LPCUSB/main_msc.c ****     0x02,                   // bmAttributes = bulk
+  94:../LPCUSB/main_msc.c ****     LE_WORD(MAX_PACKET_SIZE),// wMaxPacketSize
+  95:../LPCUSB/main_msc.c ****     0x00,                   // bInterval
+  96:../LPCUSB/main_msc.c **** 
+  97:../LPCUSB/main_msc.c ****     // string descriptors
+  98:../LPCUSB/main_msc.c ****     0x04,
+  99:../LPCUSB/main_msc.c ****     DESC_STRING,
+ 100:../LPCUSB/main_msc.c ****     LE_WORD(0x0409),
+ 101:../LPCUSB/main_msc.c **** 
+ 102:../LPCUSB/main_msc.c ****     0x14,
+ 103:../LPCUSB/main_msc.c ****     DESC_STRING,
+ 104:../LPCUSB/main_msc.c ****     'I', 0, 'N', 0, '2', 0, 'R', 0, 'o', 0, 'w', 0, 'i', 0, 'n', 0, 'g', 0,
+ 105:../LPCUSB/main_msc.c **** 
+ 106:../LPCUSB/main_msc.c ****     0x10,
+ 107:../LPCUSB/main_msc.c ****     DESC_STRING,
+ 108:../LPCUSB/main_msc.c ****     'D', 0, 'a', 0, 't', 0, 'a', 0, 'L', 0, 'o', 0, 'g', 0,
+ 109:../LPCUSB/main_msc.c **** 
+ 110:../LPCUSB/main_msc.c ****     0x1A,
+ 111:../LPCUSB/main_msc.c ****     DESC_STRING,
+ 112:../LPCUSB/main_msc.c ****     '0', 0, '0', 0, '0', 0, '0', 0, '0', 0, '0', 0, '0', 0, '0', 0, '0', 0, '0', 0, '0', 0, '0', 0,
+ 113:../LPCUSB/main_msc.c **** 
+ 114:../LPCUSB/main_msc.c ****     // terminating zero
+ 115:../LPCUSB/main_msc.c ****     0
+ 116:../LPCUSB/main_msc.c **** };
+ 117:../LPCUSB/main_msc.c **** 
+ 118:../LPCUSB/main_msc.c **** 
+ 119:../LPCUSB/main_msc.c **** /*************************************************************************
+ 120:../LPCUSB/main_msc.c ****     HandleClassRequest
+ 121:../LPCUSB/main_msc.c ****     ==================
+ 122:../LPCUSB/main_msc.c ****         Handle mass storage class request
+ 123:../LPCUSB/main_msc.c **** 
+ 124:../LPCUSB/main_msc.c **** **************************************************************************/
+ 125:../LPCUSB/main_msc.c **** static BOOL HandleClassRequest(TSetupPacket *pSetup, int *piLen, U8 **ppbData)
+ 126:../LPCUSB/main_msc.c **** {
+  21              		.loc 1 126 0
+  22              		.cfi_startproc
+  23              		@ Function supports interworking.
+  24              		@ args = 0, pretend = 0, frame = 0
+  25              		@ frame_needed = 0, uses_anonymous_args = 0
+  26              	.LVL0:
+ 127:../LPCUSB/main_msc.c ****     if (pSetup->wIndex != 0)
+  27              		.loc 1 127 0
+  28 0000 B4C0D0E1 		ldrh	ip, [r0, #4]
+  29 0004 00005CE3 		cmp	ip, #0
+ 126:../LPCUSB/main_msc.c **** {
+  30              		.loc 1 126 0
+  31 0008 08402DE9 		stmfd	sp!, {r3, lr}
+  32              	.LCFI0:
+  33              		.cfi_def_cfa_offset 8
+  34              		.cfi_offset 14, -4
+  35              		.cfi_offset 3, -8
+ 128:../LPCUSB/main_msc.c ****     {
+ 129:../LPCUSB/main_msc.c ****         DBG("Invalid idx %X\n", pSetup->wIndex);
+ 130:../LPCUSB/main_msc.c ****         return FALSE;
+  36              		.loc 1 130 0
+  37 000c 0000A013 		movne	r0, #0
+  38              	.LVL1:
+ 127:../LPCUSB/main_msc.c ****     if (pSetup->wIndex != 0)
+  39              		.loc 1 127 0
+  40 0010 1500001A 		bne	.L2
+ 131:../LPCUSB/main_msc.c ****     }
+ 132:../LPCUSB/main_msc.c ****     if (pSetup->wValue != 0)
+  41              		.loc 1 132 0
+  42 0014 B230D0E1 		ldrh	r3, [r0, #2]
+  43 0018 000053E3 		cmp	r3, #0
+ 133:../LPCUSB/main_msc.c ****     {
+ 134:../LPCUSB/main_msc.c ****         DBG("Invalid val %X\n", pSetup->wValue);
+ 135:../LPCUSB/main_msc.c ****         return FALSE;
+  44              		.loc 1 135 0
+  45 001c 0C00A011 		movne	r0, ip
+ 132:../LPCUSB/main_msc.c ****     if (pSetup->wValue != 0)
+  46              		.loc 1 132 0
+  47 0020 1100001A 		bne	.L2
+ 136:../LPCUSB/main_msc.c ****     }
+ 137:../LPCUSB/main_msc.c **** 
+ 138:../LPCUSB/main_msc.c ****     switch (pSetup->bRequest)
+  48              		.loc 1 138 0
+  49 0024 01C0D0E5 		ldrb	ip, [r0, #1]	@ zero_extendqisi2
+  50 0028 FE005CE3 		cmp	ip, #254
+  51 002c 0200000A 		beq	.L3
+  52 0030 FF005CE3 		cmp	ip, #255
+  53 0034 0B00001A 		bne	.L10
+  54 0038 040000EA 		b	.L11
+  55              	.L3:
+ 139:../LPCUSB/main_msc.c ****     {
+ 140:../LPCUSB/main_msc.c **** 
+ 141:../LPCUSB/main_msc.c ****         // get max LUN
+ 142:../LPCUSB/main_msc.c ****         case 0xFE:
+ 143:../LPCUSB/main_msc.c ****             *ppbData[0] = 0;        // No LUNs
+  56              		.loc 1 143 0
+  57 003c 002092E5 		ldr	r2, [r2, #0]
+  58              	.LVL2:
+ 144:../LPCUSB/main_msc.c ****             *piLen = 1;
+  59              		.loc 1 144 0
+  60 0040 0100A0E3 		mov	r0, #1
+ 143:../LPCUSB/main_msc.c ****             *ppbData[0] = 0;        // No LUNs
+  61              		.loc 1 143 0
+  62 0044 0030C2E5 		strb	r3, [r2, #0]
+  63              		.loc 1 144 0
+  64 0048 000081E5 		str	r0, [r1, #0]
+ 145:../LPCUSB/main_msc.c ****             break;
+  65              		.loc 1 145 0
+  66 004c 060000EA 		b	.L2
+  67              	.LVL3:
+  68              	.L11:
+  69              	.LBB4:
+  70              	.LBB5:
+ 146:../LPCUSB/main_msc.c **** 
+ 147:../LPCUSB/main_msc.c ****         // MSC reset
+ 148:../LPCUSB/main_msc.c ****         case 0xFF:
+ 149:../LPCUSB/main_msc.c ****             if (pSetup->wLength > 0)
+  71              		.loc 1 149 0
+  72 0050 B620D0E1 		ldrh	r2, [r0, #6]
+  73              	.LVL4:
+  74 0054 000052E3 		cmp	r2, #0
+  75 0058 0200001A 		bne	.L10
+ 150:../LPCUSB/main_msc.c ****             {
+ 151:../LPCUSB/main_msc.c ****                 return FALSE;
+ 152:../LPCUSB/main_msc.c ****             }
+ 153:../LPCUSB/main_msc.c ****             MSCBotReset();
+  76              		.loc 1 153 0
+  77 005c FEFFFFEB 		bl	MSCBotReset
+  78              	.LVL5:
+ 154:../LPCUSB/main_msc.c ****             break;
+ 155:../LPCUSB/main_msc.c **** 
+ 156:../LPCUSB/main_msc.c ****         default:
+ 157:../LPCUSB/main_msc.c ****             DBG("Unhandled class\n");
+ 158:../LPCUSB/main_msc.c ****             return FALSE;
+ 159:../LPCUSB/main_msc.c ****         }
+ 160:../LPCUSB/main_msc.c ****     return TRUE;
+  79              		.loc 1 160 0
+  80 0060 0100A0E3 		mov	r0, #1
+  81 0064 000000EA 		b	.L2
+  82              	.LVL6:
+  83              	.L10:
+  84              	.LBE5:
+  85              	.LBE4:
+ 158:../LPCUSB/main_msc.c ****             return FALSE;
+  86              		.loc 1 158 0
+  87 0068 0300A0E1 		mov	r0, r3
+  88              	.LVL7:
+  89              	.L2:
+ 161:../LPCUSB/main_msc.c **** }
+  90              		.loc 1 161 0
+  91 006c 0840BDE8 		ldmfd	sp!, {r3, lr}
+  92 0070 1EFF2FE1 		bx	lr
+  93              		.cfi_endproc
+  94              	.LFE0:
+  96              		.align	2
+  97              		.global	main_msc
+  99              	main_msc:
+ 100              	.LFB1:
+ 162:../LPCUSB/main_msc.c **** 
+ 163:../LPCUSB/main_msc.c **** 
+ 164:../LPCUSB/main_msc.c **** /*************************************************************************
+ 165:../LPCUSB/main_msc.c ****     msc_main
+ 166:../LPCUSB/main_msc.c ****     ====
+ 167:../LPCUSB/main_msc.c **** **************************************************************************/
+ 168:../LPCUSB/main_msc.c **** int main_msc(void)
+ 169:../LPCUSB/main_msc.c **** {
+ 101              		.loc 1 169 0
+ 102              		.cfi_startproc
+ 103              		@ Function supports interworking.
+ 104              		@ args = 0, pretend = 0, frame = 0
+ 105              		@ frame_needed = 0, uses_anonymous_args = 0
+ 106 0074 10402DE9 		stmfd	sp!, {r4, lr}
+ 107              	.LCFI1:
+ 108              		.cfi_def_cfa_offset 8
+ 109              		.cfi_offset 14, -4
+ 110              		.cfi_offset 4, -8
+ 170:../LPCUSB/main_msc.c ****     // initialise the SD card
+ 171:../LPCUSB/main_msc.c ****     BlockDevInit();
+ 111              		.loc 1 171 0
+ 112 0078 FEFFFFEB 		bl	BlockDevInit
+ 172:../LPCUSB/main_msc.c **** 
+ 173:../LPCUSB/main_msc.c ****     rprintf("Initialising USB stack\n");
+ 113              		.loc 1 173 0
+ 114 007c 6C009FE5 		ldr	r0, .L15
+ 115 0080 FEFFFFEB 		bl	rprintf
+ 174:../LPCUSB/main_msc.c **** 
+ 175:../LPCUSB/main_msc.c ****     // initialise stack
+ 176:../LPCUSB/main_msc.c ****     USBInit();
+ 116              		.loc 1 176 0
+ 117 0084 FEFFFFEB 		bl	USBInit
+ 177:../LPCUSB/main_msc.c **** 
+ 178:../LPCUSB/main_msc.c ****     // enable bulk-in interrupts on NAKs
+ 179:../LPCUSB/main_msc.c ****     // these are required to get the BOT protocol going again after a STALL
+ 180:../LPCUSB/main_msc.c ****     USBHwNakIntEnable(INACK_BI);
+ 118              		.loc 1 180 0
+ 119 0088 2000A0E3 		mov	r0, #32
+ 120 008c FEFFFFEB 		bl	USBHwNakIntEnable
+ 181:../LPCUSB/main_msc.c **** 
+ 182:../LPCUSB/main_msc.c ****     // register descriptors
+ 183:../LPCUSB/main_msc.c ****     USBRegisterDescriptors(abDescriptors);
+ 121              		.loc 1 183 0
+ 122 0090 5C009FE5 		ldr	r0, .L15+4
+ 123 0094 FEFFFFEB 		bl	USBRegisterDescriptors
+ 184:../LPCUSB/main_msc.c **** 
+ 185:../LPCUSB/main_msc.c ****     // register class request handler
+ 186:../LPCUSB/main_msc.c ****     USBRegisterRequestHandler(REQTYPE_TYPE_CLASS, HandleClassRequest, abClassReqData);
+ 124              		.loc 1 186 0
+ 125 0098 58209FE5 		ldr	r2, .L15+8
+ 126 009c 0100A0E3 		mov	r0, #1
+ 127 00a0 54109FE5 		ldr	r1, .L15+12
+ 128 00a4 FEFFFFEB 		bl	USBRegisterRequestHandler
+ 187:../LPCUSB/main_msc.c **** 
+ 188:../LPCUSB/main_msc.c ****     // register endpoint handlers
+ 189:../LPCUSB/main_msc.c ****     USBHwRegisterEPIntHandler(MSC_BULK_IN_EP, MSCBotBulkIn);
+ 129              		.loc 1 189 0
+ 130 00a8 8500A0E3 		mov	r0, #133
+ 131 00ac 4C109FE5 		ldr	r1, .L15+16
+ 132 00b0 FEFFFFEB 		bl	USBHwRegisterEPIntHandler
+ 190:../LPCUSB/main_msc.c ****     USBHwRegisterEPIntHandler(MSC_BULK_OUT_EP, MSCBotBulkOut);
+ 133              		.loc 1 190 0
+ 134 00b4 48109FE5 		ldr	r1, .L15+20
+ 135 00b8 0200A0E3 		mov	r0, #2
+ 136 00bc FEFFFFEB 		bl	USBHwRegisterEPIntHandler
+ 191:../LPCUSB/main_msc.c **** 
+ 192:../LPCUSB/main_msc.c ****     rprintf("Starting USB communication\n");
+ 137              		.loc 1 192 0
+ 138 00c0 40009FE5 		ldr	r0, .L15+24
+ 139 00c4 FEFFFFEB 		bl	rprintf
+ 193:../LPCUSB/main_msc.c **** 	
+ 194:../LPCUSB/main_msc.c ****     // connect to bus
+ 195:../LPCUSB/main_msc.c ****     USBHwConnect(TRUE);
+ 140              		.loc 1 195 0
+ 141 00c8 0100A0E3 		mov	r0, #1
+ 142 00cc FEFFFFEB 		bl	USBHwConnect
+ 196:../LPCUSB/main_msc.c **** 
+ 197:../LPCUSB/main_msc.c ****     // call USB interrupt handler continuously
+ 198:../LPCUSB/main_msc.c ****     while (IOPIN0 & (1<<23))
+ 143              		.loc 1 198 0
+ 144 00d0 34409FE5 		ldr	r4, .L15+28
+ 145 00d4 000000EA 		b	.L13
+ 146              	.L14:
+ 199:../LPCUSB/main_msc.c **** 	{
+ 200:../LPCUSB/main_msc.c **** 		USBHwISR();
+ 147              		.loc 1 200 0
+ 148 00d8 FEFFFFEB 		bl	USBHwISR
+ 149              	.L13:
+ 198:../LPCUSB/main_msc.c ****     while (IOPIN0 & (1<<23))
+ 150              		.loc 1 198 0 discriminator 1
+ 151 00dc 000094E5 		ldr	r0, [r4, #0]
+ 152 00e0 020510E2 		ands	r0, r0, #8388608
+ 153 00e4 FBFFFF1A 		bne	.L14
+ 201:../LPCUSB/main_msc.c ****     }
+ 202:../LPCUSB/main_msc.c **** 
+ 203:../LPCUSB/main_msc.c ****     return 0;
+ 204:../LPCUSB/main_msc.c **** }
+ 154              		.loc 1 204 0
+ 155 00e8 1040BDE8 		ldmfd	sp!, {r4, lr}
+ 156 00ec 1EFF2FE1 		bx	lr
+ 157              	.L16:
+ 158              		.align	2
+ 159              	.L15:
+ 160 00f0 00000000 		.word	.LC0
+ 161 00f4 00000000 		.word	.LANCHOR0
+ 162 00f8 00000000 		.word	.LANCHOR1
+ 163 00fc 00000000 		.word	HandleClassRequest
+ 164 0100 00000000 		.word	MSCBotBulkIn
+ 165 0104 00000000 		.word	MSCBotBulkOut
+ 166 0108 18000000 		.word	.LC1
+ 167 010c 008002E0 		.word	-536707072
+ 168              		.cfi_endproc
+ 169              	.LFE1:
+ 171              		.section	.rodata.str1.1,"aMS",%progbits,1
+ 172              	.LC0:
+ 173 0000 496E6974 		.ascii	"Initialising USB stack\012\000"
+ 173      69616C69 
+ 173      73696E67 
+ 173      20555342 
+ 173      20737461 
+ 174              	.LC1:
+ 175 0018 53746172 		.ascii	"Starting USB communication\012\000"
+ 175      74696E67 
+ 175      20555342 
+ 175      20636F6D 
+ 175      6D756E69 
+ 176              		.data
+ 177              		.set	.LANCHOR0,. + 0
+ 180              	abDescriptors:
+ 181 0000 12       		.byte	18
+ 182 0001 01       		.byte	1
+ 183 0002 00       		.byte	0
+ 184 0003 02       		.byte	2
+ 185 0004 00       		.byte	0
+ 186 0005 00       		.byte	0
+ 187 0006 00       		.byte	0
+ 188 0007 40       		.byte	64
+ 189 0008 4F       		.byte	79
+ 190 0009 1B       		.byte	27
+ 191 000a 01       		.byte	1
+ 192 000b 00       		.byte	0
+ 193 000c 00       		.byte	0
+ 194 000d 01       		.byte	1
+ 195 000e 01       		.byte	1
+ 196 000f 02       		.byte	2
+ 197 0010 03       		.byte	3
+ 198 0011 01       		.byte	1
+ 199 0012 09       		.byte	9
+ 200 0013 02       		.byte	2
+ 201 0014 20       		.byte	32
+ 202 0015 00       		.byte	0
+ 203 0016 01       		.byte	1
+ 204 0017 01       		.byte	1
+ 205 0018 00       		.byte	0
+ 206 0019 C0       		.byte	-64
+ 207 001a 32       		.byte	50
+ 208 001b 09       		.byte	9
+ 209 001c 04       		.byte	4
+ 210 001d 00       		.byte	0
+ 211 001e 00       		.byte	0
+ 212 001f 02       		.byte	2
+ 213 0020 08       		.byte	8
+ 214 0021 06       		.byte	6
+ 215 0022 50       		.byte	80
+ 216 0023 00       		.byte	0
+ 217 0024 07       		.byte	7
+ 218 0025 05       		.byte	5
+ 219 0026 85       		.byte	-123
+ 220 0027 02       		.byte	2
+ 221 0028 40       		.byte	64
+ 222 0029 00       		.byte	0
+ 223 002a 00       		.byte	0
+ 224 002b 07       		.byte	7
+ 225 002c 05       		.byte	5
+ 226 002d 02       		.byte	2
+ 227 002e 02       		.byte	2
+ 228 002f 40       		.byte	64
+ 229 0030 00       		.byte	0
+ 230 0031 00       		.byte	0
+ 231 0032 04       		.byte	4
+ 232 0033 03       		.byte	3
+ 233 0034 09       		.byte	9
+ 234 0035 04       		.byte	4
+ 235 0036 14       		.byte	20
+ 236 0037 03       		.byte	3
+ 237 0038 49       		.byte	73
+ 238 0039 00       		.byte	0
+ 239 003a 4E       		.byte	78
+ 240 003b 00       		.byte	0
+ 241 003c 32       		.byte	50
+ 242 003d 00       		.byte	0
+ 243 003e 52       		.byte	82
+ 244 003f 00       		.byte	0
+ 245 0040 6F       		.byte	111
+ 246 0041 00       		.byte	0
+ 247 0042 77       		.byte	119
+ 248 0043 00       		.byte	0
+ 249 0044 69       		.byte	105
+ 250 0045 00       		.byte	0
+ 251 0046 6E       		.byte	110
+ 252 0047 00       		.byte	0
+ 253 0048 67       		.byte	103
+ 254 0049 00       		.byte	0
+ 255 004a 10       		.byte	16
+ 256 004b 03       		.byte	3
+ 257 004c 44       		.byte	68
+ 258 004d 00       		.byte	0
+ 259 004e 61       		.byte	97
+ 260 004f 00       		.byte	0
+ 261 0050 74       		.byte	116
+ 262 0051 00       		.byte	0
+ 263 0052 61       		.byte	97
+ 264 0053 00       		.byte	0
+ 265 0054 4C       		.byte	76
+ 266 0055 00       		.byte	0
+ 267 0056 6F       		.byte	111
+ 268 0057 00       		.byte	0
+ 269 0058 67       		.byte	103
+ 270 0059 00       		.byte	0
+ 271 005a 1A       		.byte	26
+ 272 005b 03       		.byte	3
+ 273 005c 30       		.byte	48
+ 274 005d 00       		.byte	0
+ 275 005e 30       		.byte	48
+ 276 005f 00       		.byte	0
+ 277 0060 30       		.byte	48
+ 278 0061 00       		.byte	0
+ 279 0062 30       		.byte	48
+ 280 0063 00       		.byte	0
+ 281 0064 30       		.byte	48
+ 282 0065 00       		.byte	0
+ 283 0066 30       		.byte	48
+ 284 0067 00       		.byte	0
+ 285 0068 30       		.byte	48
+ 286 0069 00       		.byte	0
+ 287 006a 30       		.byte	48
+ 288 006b 00       		.byte	0
+ 289 006c 30       		.byte	48
+ 290 006d 00       		.byte	0
+ 291 006e 30       		.byte	48
+ 292 006f 00       		.byte	0
+ 293 0070 30       		.byte	48
+ 294 0071 00       		.byte	0
+ 295 0072 30       		.byte	48
+ 296 0073 00       		.byte	0
+ 297 0074 00       		.byte	0
+ 298              		.bss
+ 299              		.set	.LANCHOR1,. + 0
+ 302              	abClassReqData:
+ 303 0000 00000000 		.space	4
+ 304              		.text
+ 305              	.Letext0:
+ 306              		.file 2 "../LPCUSB/type.h"
+ 307              		.file 3 "../LPCUSB/usbstruct.h"
+DEFINED SYMBOLS
+                            *ABS*:00000000 main_msc.c
+     /tmp/ccqHmgD1.s:16     .text:00000000 $a
+     /tmp/ccqHmgD1.s:18     .text:00000000 HandleClassRequest
+     /tmp/ccqHmgD1.s:99     .text:00000074 main_msc
+     /tmp/ccqHmgD1.s:160    .text:000000f0 $d
+     /tmp/ccqHmgD1.s:180    .data:00000000 abDescriptors
+     /tmp/ccqHmgD1.s:302    .bss:00000000 abClassReqData
+     /tmp/ccqHmgD1.s:303    .bss:00000000 $d
+                     .debug_frame:00000010 $d
+
+UNDEFINED SYMBOLS
+MSCBotReset
+BlockDevInit
+rprintf
+USBInit
+USBHwNakIntEnable
+USBRegisterDescriptors
+USBRegisterRequestHandler
+USBHwRegisterEPIntHandler
+USBHwConnect
+USBHwISR
+MSCBotBulkIn
+MSCBotBulkOut

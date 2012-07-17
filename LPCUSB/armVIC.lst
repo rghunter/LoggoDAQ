@@ -1,0 +1,334 @@
+   1              		.cpu arm7tdmi-s
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 4
+  10              		.eabi_attribute 34, 0
+  11              		.eabi_attribute 18, 4
+  12              		.file	"armVIC.c"
+  13              		.text
+  14              	.Ltext0:
+  15              		.cfi_sections	.debug_frame
+  16              		.align	2
+  17              		.global	disableIRQ
+  19              	disableIRQ:
+  20              	.LFB2:
+  21              		.file 1 "../LPCUSB/armVIC.c"
+   1:../LPCUSB/armVIC.c **** /******************************************************************************
+   2:../LPCUSB/armVIC.c ****  *
+   3:../LPCUSB/armVIC.c ****  * $RCSfile$
+   4:../LPCUSB/armVIC.c ****  * $Revision: 124 $
+   5:../LPCUSB/armVIC.c ****  *
+   6:../LPCUSB/armVIC.c ****  * This module provides the interface routines for setting up and
+   7:../LPCUSB/armVIC.c ****  * controlling the various interrupt modes present on the ARM processor.
+   8:../LPCUSB/armVIC.c ****  * Copyright 2004, R O SoftWare
+   9:../LPCUSB/armVIC.c ****  * No guarantees, warrantees, or promises, implied or otherwise.
+  10:../LPCUSB/armVIC.c ****  * May be used for hobby or commercial purposes provided copyright
+  11:../LPCUSB/armVIC.c ****  * notice remains intact.
+  12:../LPCUSB/armVIC.c ****  *
+  13:../LPCUSB/armVIC.c ****  *****************************************************************************/
+  14:../LPCUSB/armVIC.c **** #include "type.h"
+  15:../LPCUSB/armVIC.c **** #include "armVIC.h"
+  16:../LPCUSB/armVIC.c **** 
+  17:../LPCUSB/armVIC.c **** #define IRQ_MASK 0x00000080
+  18:../LPCUSB/armVIC.c **** #define FIQ_MASK 0x00000040
+  19:../LPCUSB/armVIC.c **** #define INT_MASK (IRQ_MASK | FIQ_MASK)
+  20:../LPCUSB/armVIC.c **** 
+  21:../LPCUSB/armVIC.c **** static inline unsigned __get_cpsr(void)
+  22:../LPCUSB/armVIC.c **** {
+  23:../LPCUSB/armVIC.c ****   unsigned long retval;
+  24:../LPCUSB/armVIC.c ****   asm volatile (" mrs  %0, cpsr" : "=r" (retval) : /* no inputs */  ); 
+  25:../LPCUSB/armVIC.c ****   return retval;
+  26:../LPCUSB/armVIC.c **** }
+  27:../LPCUSB/armVIC.c **** 
+  28:../LPCUSB/armVIC.c **** static inline void __set_cpsr(unsigned val)
+  29:../LPCUSB/armVIC.c **** {
+  30:../LPCUSB/armVIC.c ****   asm volatile (" msr  cpsr, %0" : /* no outputs */ : "r" (val)  );	
+  31:../LPCUSB/armVIC.c **** }
+  32:../LPCUSB/armVIC.c **** 
+  33:../LPCUSB/armVIC.c **** unsigned disableIRQ(void)
+  34:../LPCUSB/armVIC.c **** {
+  22              		.loc 1 34 0
+  23              		.cfi_startproc
+  24              		@ Function supports interworking.
+  25              		@ args = 0, pretend = 0, frame = 0
+  26              		@ frame_needed = 0, uses_anonymous_args = 0
+  27              		@ link register save eliminated.
+  28              	.LBB26:
+  29              	.LBB27:
+  24:../LPCUSB/armVIC.c ****   asm volatile (" mrs  %0, cpsr" : "=r" (retval) : /* no inputs */  ); 
+  30              		.loc 1 24 0
+  31              	@ 24 "../LPCUSB/armVIC.c" 1
+  32 0000 00000FE1 		 mrs  r0, cpsr
+  33              	@ 0 "" 2
+  34              	.LVL0:
+  35              	.LBE27:
+  36              	.LBE26:
+  35:../LPCUSB/armVIC.c ****   unsigned _cpsr;
+  36:../LPCUSB/armVIC.c **** 
+  37:../LPCUSB/armVIC.c ****   _cpsr = __get_cpsr();
+  38:../LPCUSB/armVIC.c ****   __set_cpsr(_cpsr | IRQ_MASK);
+  37              		.loc 1 38 0
+  38 0004 803080E3 		orr	r3, r0, #128
+  39              	.LBB28:
+  40              	.LBB29:
+  30:../LPCUSB/armVIC.c ****   asm volatile (" msr  cpsr, %0" : /* no outputs */ : "r" (val)  );	
+  41              		.loc 1 30 0
+  42              	@ 30 "../LPCUSB/armVIC.c" 1
+  43 0008 03F029E1 		 msr  cpsr, r3
+  44              	@ 0 "" 2
+  45              	.LBE29:
+  46              	.LBE28:
+  39:../LPCUSB/armVIC.c ****   return _cpsr;
+  40:../LPCUSB/armVIC.c **** }
+  47              		.loc 1 40 0
+  48 000c 1EFF2FE1 		bx	lr
+  49              		.cfi_endproc
+  50              	.LFE2:
+  52              		.align	2
+  53              		.global	restoreIRQ
+  55              	restoreIRQ:
+  56              	.LFB3:
+  41:../LPCUSB/armVIC.c **** 
+  42:../LPCUSB/armVIC.c **** unsigned restoreIRQ(unsigned oldCPSR)
+  43:../LPCUSB/armVIC.c **** {
+  57              		.loc 1 43 0
+  58              		.cfi_startproc
+  59              		@ Function supports interworking.
+  60              		@ args = 0, pretend = 0, frame = 0
+  61              		@ frame_needed = 0, uses_anonymous_args = 0
+  62              		@ link register save eliminated.
+  63              	.LVL1:
+  64              	.LBB30:
+  65              	.LBB31:
+  24:../LPCUSB/armVIC.c ****   asm volatile (" mrs  %0, cpsr" : "=r" (retval) : /* no inputs */  ); 
+  66              		.loc 1 24 0
+  67              	@ 24 "../LPCUSB/armVIC.c" 1
+  68 0010 00300FE1 		 mrs  r3, cpsr
+  69              	@ 0 "" 2
+  70              	.LVL2:
+  71              	.LBE31:
+  72              	.LBE30:
+  44:../LPCUSB/armVIC.c ****   unsigned _cpsr;
+  45:../LPCUSB/armVIC.c **** 
+  46:../LPCUSB/armVIC.c ****   _cpsr = __get_cpsr();
+  47:../LPCUSB/armVIC.c ****   __set_cpsr((_cpsr & ~IRQ_MASK) | (oldCPSR & IRQ_MASK));
+  73              		.loc 1 47 0
+  74 0014 8020C3E3 		bic	r2, r3, #128
+  75 0018 800000E2 		and	r0, r0, #128
+  76              	.LVL3:
+  77 001c 000082E1 		orr	r0, r2, r0
+  78              	.LBB32:
+  79              	.LBB33:
+  30:../LPCUSB/armVIC.c ****   asm volatile (" msr  cpsr, %0" : /* no outputs */ : "r" (val)  );	
+  80              		.loc 1 30 0
+  81              	@ 30 "../LPCUSB/armVIC.c" 1
+  82 0020 00F029E1 		 msr  cpsr, r0
+  83              	@ 0 "" 2
+  84              	.LBE33:
+  85              	.LBE32:
+  48:../LPCUSB/armVIC.c ****   return _cpsr;
+  49:../LPCUSB/armVIC.c **** }
+  86              		.loc 1 49 0
+  87 0024 0300A0E1 		mov	r0, r3
+  88 0028 1EFF2FE1 		bx	lr
+  89              		.cfi_endproc
+  90              	.LFE3:
+  92              		.align	2
+  93              		.global	enableIRQ
+  95              	enableIRQ:
+  96              	.LFB4:
+  50:../LPCUSB/armVIC.c **** 
+  51:../LPCUSB/armVIC.c **** unsigned enableIRQ(void)
+  52:../LPCUSB/armVIC.c **** {
+  97              		.loc 1 52 0
+  98              		.cfi_startproc
+  99              		@ Function supports interworking.
+ 100              		@ args = 0, pretend = 0, frame = 0
+ 101              		@ frame_needed = 0, uses_anonymous_args = 0
+ 102              		@ link register save eliminated.
+ 103              	.LBB34:
+ 104              	.LBB35:
+  24:../LPCUSB/armVIC.c ****   asm volatile (" mrs  %0, cpsr" : "=r" (retval) : /* no inputs */  ); 
+ 105              		.loc 1 24 0
+ 106              	@ 24 "../LPCUSB/armVIC.c" 1
+ 107 002c 00000FE1 		 mrs  r0, cpsr
+ 108              	@ 0 "" 2
+ 109              	.LVL4:
+ 110              	.LBE35:
+ 111              	.LBE34:
+  53:../LPCUSB/armVIC.c ****   unsigned _cpsr;
+  54:../LPCUSB/armVIC.c **** 
+  55:../LPCUSB/armVIC.c ****   _cpsr = __get_cpsr();
+  56:../LPCUSB/armVIC.c ****   __set_cpsr(_cpsr & ~IRQ_MASK);
+ 112              		.loc 1 56 0
+ 113 0030 8030C0E3 		bic	r3, r0, #128
+ 114              	.LBB36:
+ 115              	.LBB37:
+  30:../LPCUSB/armVIC.c ****   asm volatile (" msr  cpsr, %0" : /* no outputs */ : "r" (val)  );	
+ 116              		.loc 1 30 0
+ 117              	@ 30 "../LPCUSB/armVIC.c" 1
+ 118 0034 03F029E1 		 msr  cpsr, r3
+ 119              	@ 0 "" 2
+ 120              	.LBE37:
+ 121              	.LBE36:
+  57:../LPCUSB/armVIC.c ****   return _cpsr;
+  58:../LPCUSB/armVIC.c **** }
+ 122              		.loc 1 58 0
+ 123 0038 1EFF2FE1 		bx	lr
+ 124              		.cfi_endproc
+ 125              	.LFE4:
+ 127              		.align	2
+ 128              		.global	disableFIQ
+ 130              	disableFIQ:
+ 131              	.LFB5:
+  59:../LPCUSB/armVIC.c **** 
+  60:../LPCUSB/armVIC.c **** unsigned disableFIQ(void)
+  61:../LPCUSB/armVIC.c **** {
+ 132              		.loc 1 61 0
+ 133              		.cfi_startproc
+ 134              		@ Function supports interworking.
+ 135              		@ args = 0, pretend = 0, frame = 0
+ 136              		@ frame_needed = 0, uses_anonymous_args = 0
+ 137              		@ link register save eliminated.
+ 138              	.LBB38:
+ 139              	.LBB39:
+  24:../LPCUSB/armVIC.c ****   asm volatile (" mrs  %0, cpsr" : "=r" (retval) : /* no inputs */  ); 
+ 140              		.loc 1 24 0
+ 141              	@ 24 "../LPCUSB/armVIC.c" 1
+ 142 003c 00000FE1 		 mrs  r0, cpsr
+ 143              	@ 0 "" 2
+ 144              	.LVL5:
+ 145              	.LBE39:
+ 146              	.LBE38:
+  62:../LPCUSB/armVIC.c ****   unsigned _cpsr;
+  63:../LPCUSB/armVIC.c **** 
+  64:../LPCUSB/armVIC.c ****   _cpsr = __get_cpsr();
+  65:../LPCUSB/armVIC.c ****   __set_cpsr(_cpsr | FIQ_MASK);
+ 147              		.loc 1 65 0
+ 148 0040 403080E3 		orr	r3, r0, #64
+ 149              	.LBB40:
+ 150              	.LBB41:
+  30:../LPCUSB/armVIC.c ****   asm volatile (" msr  cpsr, %0" : /* no outputs */ : "r" (val)  );	
+ 151              		.loc 1 30 0
+ 152              	@ 30 "../LPCUSB/armVIC.c" 1
+ 153 0044 03F029E1 		 msr  cpsr, r3
+ 154              	@ 0 "" 2
+ 155              	.LBE41:
+ 156              	.LBE40:
+  66:../LPCUSB/armVIC.c ****   return _cpsr;
+  67:../LPCUSB/armVIC.c **** }
+ 157              		.loc 1 67 0
+ 158 0048 1EFF2FE1 		bx	lr
+ 159              		.cfi_endproc
+ 160              	.LFE5:
+ 162              		.align	2
+ 163              		.global	restoreFIQ
+ 165              	restoreFIQ:
+ 166              	.LFB6:
+  68:../LPCUSB/armVIC.c **** 
+  69:../LPCUSB/armVIC.c **** unsigned restoreFIQ(unsigned oldCPSR)
+  70:../LPCUSB/armVIC.c **** {
+ 167              		.loc 1 70 0
+ 168              		.cfi_startproc
+ 169              		@ Function supports interworking.
+ 170              		@ args = 0, pretend = 0, frame = 0
+ 171              		@ frame_needed = 0, uses_anonymous_args = 0
+ 172              		@ link register save eliminated.
+ 173              	.LVL6:
+ 174              	.LBB42:
+ 175              	.LBB43:
+  24:../LPCUSB/armVIC.c ****   asm volatile (" mrs  %0, cpsr" : "=r" (retval) : /* no inputs */  ); 
+ 176              		.loc 1 24 0
+ 177              	@ 24 "../LPCUSB/armVIC.c" 1
+ 178 004c 00300FE1 		 mrs  r3, cpsr
+ 179              	@ 0 "" 2
+ 180              	.LVL7:
+ 181              	.LBE43:
+ 182              	.LBE42:
+  71:../LPCUSB/armVIC.c ****   unsigned _cpsr;
+  72:../LPCUSB/armVIC.c **** 
+  73:../LPCUSB/armVIC.c ****   _cpsr = __get_cpsr();
+  74:../LPCUSB/armVIC.c ****   __set_cpsr((_cpsr & ~FIQ_MASK) | (oldCPSR & FIQ_MASK));
+ 183              		.loc 1 74 0
+ 184 0050 4020C3E3 		bic	r2, r3, #64
+ 185 0054 400000E2 		and	r0, r0, #64
+ 186              	.LVL8:
+ 187 0058 000082E1 		orr	r0, r2, r0
+ 188              	.LBB44:
+ 189              	.LBB45:
+  30:../LPCUSB/armVIC.c ****   asm volatile (" msr  cpsr, %0" : /* no outputs */ : "r" (val)  );	
+ 190              		.loc 1 30 0
+ 191              	@ 30 "../LPCUSB/armVIC.c" 1
+ 192 005c 00F029E1 		 msr  cpsr, r0
+ 193              	@ 0 "" 2
+ 194              	.LBE45:
+ 195              	.LBE44:
+  75:../LPCUSB/armVIC.c ****   return _cpsr;
+  76:../LPCUSB/armVIC.c **** }
+ 196              		.loc 1 76 0
+ 197 0060 0300A0E1 		mov	r0, r3
+ 198 0064 1EFF2FE1 		bx	lr
+ 199              		.cfi_endproc
+ 200              	.LFE6:
+ 202              		.align	2
+ 203              		.global	enableFIQ
+ 205              	enableFIQ:
+ 206              	.LFB7:
+  77:../LPCUSB/armVIC.c **** 
+  78:../LPCUSB/armVIC.c **** unsigned enableFIQ(void)
+  79:../LPCUSB/armVIC.c **** {
+ 207              		.loc 1 79 0
+ 208              		.cfi_startproc
+ 209              		@ Function supports interworking.
+ 210              		@ args = 0, pretend = 0, frame = 0
+ 211              		@ frame_needed = 0, uses_anonymous_args = 0
+ 212              		@ link register save eliminated.
+ 213              	.LBB46:
+ 214              	.LBB47:
+  24:../LPCUSB/armVIC.c ****   asm volatile (" mrs  %0, cpsr" : "=r" (retval) : /* no inputs */  ); 
+ 215              		.loc 1 24 0
+ 216              	@ 24 "../LPCUSB/armVIC.c" 1
+ 217 0068 00000FE1 		 mrs  r0, cpsr
+ 218              	@ 0 "" 2
+ 219              	.LVL9:
+ 220              	.LBE47:
+ 221              	.LBE46:
+  80:../LPCUSB/armVIC.c ****   unsigned _cpsr;
+  81:../LPCUSB/armVIC.c **** 
+  82:../LPCUSB/armVIC.c ****   _cpsr = __get_cpsr();
+  83:../LPCUSB/armVIC.c ****   __set_cpsr(_cpsr & ~FIQ_MASK);
+ 222              		.loc 1 83 0
+ 223 006c 4030C0E3 		bic	r3, r0, #64
+ 224              	.LBB48:
+ 225              	.LBB49:
+  30:../LPCUSB/armVIC.c ****   asm volatile (" msr  cpsr, %0" : /* no outputs */ : "r" (val)  );	
+ 226              		.loc 1 30 0
+ 227              	@ 30 "../LPCUSB/armVIC.c" 1
+ 228 0070 03F029E1 		 msr  cpsr, r3
+ 229              	@ 0 "" 2
+ 230              	.LBE49:
+ 231              	.LBE48:
+  84:../LPCUSB/armVIC.c ****   return _cpsr;
+  85:../LPCUSB/armVIC.c **** }
+ 232              		.loc 1 85 0
+ 233 0074 1EFF2FE1 		bx	lr
+ 234              		.cfi_endproc
+ 235              	.LFE7:
+ 237              	.Letext0:
+DEFINED SYMBOLS
+                            *ABS*:00000000 armVIC.c
+     /tmp/ccgifmkI.s:16     .text:00000000 $a
+     /tmp/ccgifmkI.s:19     .text:00000000 disableIRQ
+     /tmp/ccgifmkI.s:55     .text:00000010 restoreIRQ
+     /tmp/ccgifmkI.s:95     .text:0000002c enableIRQ
+     /tmp/ccgifmkI.s:130    .text:0000003c disableFIQ
+     /tmp/ccgifmkI.s:165    .text:0000004c restoreFIQ
+     /tmp/ccgifmkI.s:205    .text:00000068 enableFIQ
+                     .debug_frame:00000010 $d
+
+NO UNDEFINED SYMBOLS

@@ -1,0 +1,1092 @@
+   1              		.cpu arm7tdmi-s
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 4
+  10              		.eabi_attribute 34, 0
+  11              		.eabi_attribute 18, 4
+  12              		.file	"msc_bot.c"
+  13              		.text
+  14              	.Ltext0:
+  15              		.cfi_sections	.debug_frame
+  16              		.align	2
+  18              	SendCSW:
+  19              	.LFB1:
+  20              		.file 1 "../LPCUSB/msc_bot.c"
+   1:../LPCUSB/msc_bot.c **** /*
+   2:../LPCUSB/msc_bot.c ****     LPCUSB, an USB device driver for LPC microcontrollers
+   3:../LPCUSB/msc_bot.c ****     Copyright (C) 2006 Bertrik Sikken (bertrik@sikken.nl)
+   4:../LPCUSB/msc_bot.c **** 
+   5:../LPCUSB/msc_bot.c ****     This library is free software; you can redistribute it and/or
+   6:../LPCUSB/msc_bot.c ****     modify it under the terms of the GNU Lesser General Public
+   7:../LPCUSB/msc_bot.c ****     License as published by the Free Software Foundation; either
+   8:../LPCUSB/msc_bot.c ****     version 2.1 of the License, or (at your option) any later version.
+   9:../LPCUSB/msc_bot.c **** 
+  10:../LPCUSB/msc_bot.c ****     This library is distributed in the hope that it will be useful,
+  11:../LPCUSB/msc_bot.c ****     but WITHOUT ANY WARRANTY; without even the implied warranty of
+  12:../LPCUSB/msc_bot.c ****     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  13:../LPCUSB/msc_bot.c ****     Lesser General Public License for more details.
+  14:../LPCUSB/msc_bot.c **** 
+  15:../LPCUSB/msc_bot.c ****     You should have received a copy of the GNU Lesser General Public
+  16:../LPCUSB/msc_bot.c ****     License along with this library; if not, write to the Free Software
+  17:../LPCUSB/msc_bot.c ****     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+  18:../LPCUSB/msc_bot.c **** */
+  19:../LPCUSB/msc_bot.c **** 
+  20:../LPCUSB/msc_bot.c **** #include <string.h>
+  21:../LPCUSB/msc_bot.c **** 
+  22:../LPCUSB/msc_bot.c **** #include "type.h"
+  23:../LPCUSB/msc_bot.c **** #include <stdio.h>
+  24:../LPCUSB/msc_bot.c **** #include "rprintf.h"
+  25:../LPCUSB/msc_bot.c **** 
+  26:../LPCUSB/msc_bot.c **** #include "usbapi.h"
+  27:../LPCUSB/msc_bot.c **** #include "usbdebug.h"
+  28:../LPCUSB/msc_bot.c **** 
+  29:../LPCUSB/msc_bot.c **** #include "msc_bot.h"
+  30:../LPCUSB/msc_bot.c **** #include "msc_scsi.h"
+  31:../LPCUSB/msc_bot.c **** 
+  32:../LPCUSB/msc_bot.c **** #undef MIN
+  33:../LPCUSB/msc_bot.c **** #define MIN(x,y)	((x)<(y)?(x):(y))	/**< MIN */
+  34:../LPCUSB/msc_bot.c **** 
+  35:../LPCUSB/msc_bot.c **** 
+  36:../LPCUSB/msc_bot.c **** typedef struct
+  37:../LPCUSB/msc_bot.c **** {
+  38:../LPCUSB/msc_bot.c ****     U32     dwCBWSignature;
+  39:../LPCUSB/msc_bot.c ****     U32     dwCBWTag;
+  40:../LPCUSB/msc_bot.c ****     U32     dwCBWDataTransferLength;
+  41:../LPCUSB/msc_bot.c ****     U8      bmCBWFlags;
+  42:../LPCUSB/msc_bot.c ****     U8      bCBWLun;
+  43:../LPCUSB/msc_bot.c ****     U8      bCBWCBLength;
+  44:../LPCUSB/msc_bot.c ****     U8      CBWCB[16];
+  45:../LPCUSB/msc_bot.c **** }
+  46:../LPCUSB/msc_bot.c **** TCBW;
+  47:../LPCUSB/msc_bot.c **** 
+  48:../LPCUSB/msc_bot.c **** typedef struct
+  49:../LPCUSB/msc_bot.c **** {
+  50:../LPCUSB/msc_bot.c ****     U32     dwCSWSignature;
+  51:../LPCUSB/msc_bot.c ****     U32     dwCSWTag;
+  52:../LPCUSB/msc_bot.c ****     U32     dwCSWDataResidue;
+  53:../LPCUSB/msc_bot.c ****     U8      bmCSWStatus;
+  54:../LPCUSB/msc_bot.c **** }
+  55:../LPCUSB/msc_bot.c **** TCSW;
+  56:../LPCUSB/msc_bot.c **** 
+  57:../LPCUSB/msc_bot.c **** typedef enum
+  58:../LPCUSB/msc_bot.c **** {
+  59:../LPCUSB/msc_bot.c ****     eCBW,
+  60:../LPCUSB/msc_bot.c ****     eDataOut,
+  61:../LPCUSB/msc_bot.c ****     eDataIn,
+  62:../LPCUSB/msc_bot.c ****     eCSW,
+  63:../LPCUSB/msc_bot.c ****     eStalled
+  64:../LPCUSB/msc_bot.c **** }
+  65:../LPCUSB/msc_bot.c **** EBotState;
+  66:../LPCUSB/msc_bot.c **** 
+  67:../LPCUSB/msc_bot.c **** 
+  68:../LPCUSB/msc_bot.c **** #define CBW_SIGNATURE   0x43425355
+  69:../LPCUSB/msc_bot.c **** #define CSW_SIGNATURE   0x53425355
+  70:../LPCUSB/msc_bot.c **** 
+  71:../LPCUSB/msc_bot.c **** #define STATUS_PASSED       0x00
+  72:../LPCUSB/msc_bot.c **** #define STATUS_FAILED       0x01
+  73:../LPCUSB/msc_bot.c **** #define STATUS_PHASE_ERR    0x02
+  74:../LPCUSB/msc_bot.c **** 
+  75:../LPCUSB/msc_bot.c **** static U32          dwTransferSize;     // total size of data transfer
+  76:../LPCUSB/msc_bot.c **** static U32          dwOffset;           // offset in current data transfer
+  77:../LPCUSB/msc_bot.c **** 
+  78:../LPCUSB/msc_bot.c **** static TCBW         CBW;
+  79:../LPCUSB/msc_bot.c **** static TCSW         CSW;
+  80:../LPCUSB/msc_bot.c **** 
+  81:../LPCUSB/msc_bot.c **** static EBotState    eState;
+  82:../LPCUSB/msc_bot.c **** 
+  83:../LPCUSB/msc_bot.c **** static U8           *pbData;
+  84:../LPCUSB/msc_bot.c **** 
+  85:../LPCUSB/msc_bot.c **** 
+  86:../LPCUSB/msc_bot.c **** 
+  87:../LPCUSB/msc_bot.c **** void MSCBotReset(void)
+  88:../LPCUSB/msc_bot.c **** {
+  89:../LPCUSB/msc_bot.c ****     DBG("BOT reset in state %d\n", eState);
+  90:../LPCUSB/msc_bot.c ****     // reset BOT state
+  91:../LPCUSB/msc_bot.c ****     eState = eCBW;
+  92:../LPCUSB/msc_bot.c ****     // reset SCSI
+  93:../LPCUSB/msc_bot.c ****     SCSIReset();
+  94:../LPCUSB/msc_bot.c **** }
+  95:../LPCUSB/msc_bot.c **** 
+  96:../LPCUSB/msc_bot.c **** 
+  97:../LPCUSB/msc_bot.c **** static void SendCSW(U8 bStatus)
+  98:../LPCUSB/msc_bot.c **** {
+  21              		.loc 1 98 0
+  22              		.cfi_startproc
+  23              		@ Function supports interworking.
+  24              		@ args = 0, pretend = 0, frame = 0
+  25              		@ frame_needed = 0, uses_anonymous_args = 0
+  26              		@ link register save eliminated.
+  27              	.LVL0:
+  99:../LPCUSB/msc_bot.c ****     int iResidue;
+ 100:../LPCUSB/msc_bot.c **** 
+ 101:../LPCUSB/msc_bot.c ****     iResidue = CBW.dwCBWDataTransferLength - dwTransferSize;
+  28              		.loc 1 101 0
+  29 0000 30309FE5 		ldr	r3, .L2
+  30 0004 081093E5 		ldr	r1, [r3, #8]
+  31 0008 202093E5 		ldr	r2, [r3, #32]
+  32 000c 012062E0 		rsb	r2, r2, r1
+  33              	.LVL1:
+ 102:../LPCUSB/msc_bot.c **** 
+ 103:../LPCUSB/msc_bot.c ****     // construct CSW
+ 104:../LPCUSB/msc_bot.c ****     CSW.dwCSWSignature      = CSW_SIGNATURE;
+  34              		.loc 1 104 0
+  35 0010 24109FE5 		ldr	r1, .L2+4
+ 105:../LPCUSB/msc_bot.c ****     CSW.dwCSWTag            = CBW.dwCBWTag;
+ 106:../LPCUSB/msc_bot.c ****     CSW.dwCSWDataResidue    = MAX(iResidue, 0);
+  36              		.loc 1 106 0
+  37 0014 C22FC2E1 		bic	r2, r2, r2, asr #31
+  38              	.LVL2:
+ 104:../LPCUSB/msc_bot.c ****     CSW.dwCSWSignature      = CSW_SIGNATURE;
+  39              		.loc 1 104 0
+  40 0018 241083E5 		str	r1, [r3, #36]
+ 105:../LPCUSB/msc_bot.c ****     CSW.dwCSWTag            = CBW.dwCBWTag;
+  41              		.loc 1 105 0
+  42 001c 041093E5 		ldr	r1, [r3, #4]
+  43              		.loc 1 106 0
+  44 0020 2C2083E5 		str	r2, [r3, #44]
+ 107:../LPCUSB/msc_bot.c ****     CSW.bmCSWStatus         = bStatus;
+ 108:../LPCUSB/msc_bot.c **** 
+ 109:../LPCUSB/msc_bot.c ****     DBG("CSW: status=%x, residue=%d\n", bStatus, CSW.dwCSWDataResidue);
+ 110:../LPCUSB/msc_bot.c **** 
+ 111:../LPCUSB/msc_bot.c ****     // next state
+ 112:../LPCUSB/msc_bot.c ****     eState = eCSW;
+  45              		.loc 1 112 0
+  46 0024 0320A0E3 		mov	r2, #3
+ 105:../LPCUSB/msc_bot.c ****     CSW.dwCSWTag            = CBW.dwCBWTag;
+  47              		.loc 1 105 0
+  48 0028 281083E5 		str	r1, [r3, #40]
+ 107:../LPCUSB/msc_bot.c ****     CSW.bmCSWStatus         = bStatus;
+  49              		.loc 1 107 0
+  50 002c 3000C3E5 		strb	r0, [r3, #48]
+  51              		.loc 1 112 0
+  52 0030 3420C3E5 		strb	r2, [r3, #52]
+ 113:../LPCUSB/msc_bot.c **** }
+  53              		.loc 1 113 0
+  54 0034 1EFF2FE1 		bx	lr
+  55              	.L3:
+  56              		.align	2
+  57              	.L2:
+  58 0038 00000000 		.word	.LANCHOR0
+  59 003c 55534253 		.word	1396855637
+  60              		.cfi_endproc
+  61              	.LFE1:
+  63              		.align	2
+  65              	BOTStall:
+  66              	.LFB3:
+ 114:../LPCUSB/msc_bot.c **** 
+ 115:../LPCUSB/msc_bot.c **** 
+ 116:../LPCUSB/msc_bot.c **** /*************************************************************************
+ 117:../LPCUSB/msc_bot.c ****     CheckCBW
+ 118:../LPCUSB/msc_bot.c ****     ========
+ 119:../LPCUSB/msc_bot.c ****         Checks if CBW is valid and meaningful
+ 120:../LPCUSB/msc_bot.c **** 
+ 121:../LPCUSB/msc_bot.c ****     IN      pCBW    Command block wrapper
+ 122:../LPCUSB/msc_bot.c ****             iLen    Length of CBW
+ 123:../LPCUSB/msc_bot.c **** 
+ 124:../LPCUSB/msc_bot.c ****     Returns TRUE if valid and meaningful
+ 125:../LPCUSB/msc_bot.c **** **************************************************************************/
+ 126:../LPCUSB/msc_bot.c **** static BOOL CheckCBW(TCBW *pCBW, int iLen)
+ 127:../LPCUSB/msc_bot.c **** {
+ 128:../LPCUSB/msc_bot.c ****     // CBW valid?
+ 129:../LPCUSB/msc_bot.c ****     if (iLen != 31)
+ 130:../LPCUSB/msc_bot.c ****     {
+ 131:../LPCUSB/msc_bot.c ****         DBG("Invalid length (%d)\n", iLen);
+ 132:../LPCUSB/msc_bot.c ****         return FALSE;
+ 133:../LPCUSB/msc_bot.c ****     }
+ 134:../LPCUSB/msc_bot.c ****     if (pCBW->dwCBWSignature != CBW_SIGNATURE)
+ 135:../LPCUSB/msc_bot.c ****     {
+ 136:../LPCUSB/msc_bot.c ****         DBG("Invalid signature %x\n", pCBW->dwCBWSignature);
+ 137:../LPCUSB/msc_bot.c ****         return FALSE;
+ 138:../LPCUSB/msc_bot.c ****     }
+ 139:../LPCUSB/msc_bot.c **** 
+ 140:../LPCUSB/msc_bot.c ****     // CBW meaningful?
+ 141:../LPCUSB/msc_bot.c ****     if (pCBW->bCBWLun != 0)
+ 142:../LPCUSB/msc_bot.c ****     {
+ 143:../LPCUSB/msc_bot.c ****         DBG("Invalid LUN %d\n", pCBW->bCBWLun);
+ 144:../LPCUSB/msc_bot.c ****         return FALSE;
+ 145:../LPCUSB/msc_bot.c ****     }
+ 146:../LPCUSB/msc_bot.c ****     if ((pCBW->bCBWCBLength < 1) || (pCBW->bCBWCBLength > 16))
+ 147:../LPCUSB/msc_bot.c ****     {
+ 148:../LPCUSB/msc_bot.c ****         DBG("Invalid CB len %d\n", pCBW->bCBWCBLength);
+ 149:../LPCUSB/msc_bot.c ****         return FALSE;
+ 150:../LPCUSB/msc_bot.c ****     }
+ 151:../LPCUSB/msc_bot.c ****     return TRUE;
+ 152:../LPCUSB/msc_bot.c **** }
+ 153:../LPCUSB/msc_bot.c **** 
+ 154:../LPCUSB/msc_bot.c **** 
+ 155:../LPCUSB/msc_bot.c **** /*************************************************************************
+ 156:../LPCUSB/msc_bot.c ****     BOTStall
+ 157:../LPCUSB/msc_bot.c ****     ========
+ 158:../LPCUSB/msc_bot.c ****         Local function to stall ongoing transfer
+ 159:../LPCUSB/msc_bot.c **** 
+ 160:../LPCUSB/msc_bot.c ****     Which endpoint to stall is determined by looking at the transfer
+ 161:../LPCUSB/msc_bot.c ****     direction intended by the host.
+ 162:../LPCUSB/msc_bot.c **** 
+ 163:../LPCUSB/msc_bot.c **** **************************************************************************/
+ 164:../LPCUSB/msc_bot.c **** static void BOTStall(void)
+ 165:../LPCUSB/msc_bot.c **** {
+  67              		.loc 1 165 0
+  68              		.cfi_startproc
+  69              		@ Function supports interworking.
+  70              		@ args = 0, pretend = 0, frame = 0
+  71              		@ frame_needed = 0, uses_anonymous_args = 0
+  72 0040 08402DE9 		stmfd	sp!, {r3, lr}
+  73              	.LCFI0:
+  74              		.cfi_def_cfa_offset 8
+  75              		.cfi_offset 14, -4
+  76              		.cfi_offset 3, -8
+ 166:../LPCUSB/msc_bot.c ****     if ((CBW.bmCBWFlags & 0x80) || (CBW.dwCBWDataTransferLength == 0))
+  77              		.loc 1 166 0
+  78 0044 2C309FE5 		ldr	r3, .L9
+  79 0048 DC20D3E1 		ldrsb	r2, [r3, #12]
+  80 004c 000052E3 		cmp	r2, #0
+  81 0050 030000BA 		blt	.L5
+  82              		.loc 1 166 0 is_stmt 0 discriminator 1
+  83 0054 083093E5 		ldr	r3, [r3, #8]
+  84 0058 000053E3 		cmp	r3, #0
+  85              	.LBB6:
+  86              	.LBB7:
+ 167:../LPCUSB/msc_bot.c ****     {
+ 168:../LPCUSB/msc_bot.c ****         // stall data-in or CSW
+ 169:../LPCUSB/msc_bot.c ****         USBHwEPStall(MSC_BULK_IN_EP, TRUE);
+ 170:../LPCUSB/msc_bot.c ****     }
+ 171:../LPCUSB/msc_bot.c ****     else
+ 172:../LPCUSB/msc_bot.c ****     {
+ 173:../LPCUSB/msc_bot.c ****         // stall data-out
+ 174:../LPCUSB/msc_bot.c ****         USBHwEPStall(MSC_BULK_OUT_EP, TRUE);
+  87              		.loc 1 174 0 is_stmt 1 discriminator 1
+  88 005c 0200A013 		movne	r0, #2
+  89              	.LBE7:
+  90              	.LBE6:
+ 166:../LPCUSB/msc_bot.c ****     if ((CBW.bmCBWFlags & 0x80) || (CBW.dwCBWDataTransferLength == 0))
+  91              		.loc 1 166 0 discriminator 1
+  92 0060 0000001A 		bne	.L8
+  93              	.L5:
+ 169:../LPCUSB/msc_bot.c ****         USBHwEPStall(MSC_BULK_IN_EP, TRUE);
+  94              		.loc 1 169 0
+  95 0064 8500A0E3 		mov	r0, #133
+  96              	.L8:
+  97              	.LBB9:
+  98              	.LBB8:
+  99              		.loc 1 174 0
+ 100 0068 0110A0E3 		mov	r1, #1
+ 101 006c FEFFFFEB 		bl	USBHwEPStall
+ 102              	.LBE8:
+ 103              	.LBE9:
+ 175:../LPCUSB/msc_bot.c ****     }
+ 176:../LPCUSB/msc_bot.c **** }
+ 104              		.loc 1 176 0
+ 105 0070 0840BDE8 		ldmfd	sp!, {r3, lr}
+ 106 0074 1EFF2FE1 		bx	lr
+ 107              	.L10:
+ 108              		.align	2
+ 109              	.L9:
+ 110 0078 00000000 		.word	.LANCHOR0
+ 111              		.cfi_endproc
+ 112              	.LFE3:
+ 114              		.align	2
+ 116              	HandleDataIn:
+ 117              	.LFB4:
+ 177:../LPCUSB/msc_bot.c **** 
+ 178:../LPCUSB/msc_bot.c **** 
+ 179:../LPCUSB/msc_bot.c **** /*************************************************************************
+ 180:../LPCUSB/msc_bot.c ****     HandleDataIn
+ 181:../LPCUSB/msc_bot.c ****     ============
+ 182:../LPCUSB/msc_bot.c ****         Handles data from device-to-host
+ 183:../LPCUSB/msc_bot.c **** 
+ 184:../LPCUSB/msc_bot.c **** **************************************************************************/
+ 185:../LPCUSB/msc_bot.c **** static void HandleDataIn(void)
+ 186:../LPCUSB/msc_bot.c **** {
+ 118              		.loc 1 186 0
+ 119              		.cfi_startproc
+ 120              		@ Function supports interworking.
+ 121              		@ args = 0, pretend = 0, frame = 0
+ 122              		@ frame_needed = 0, uses_anonymous_args = 0
+ 123 007c 38402DE9 		stmfd	sp!, {r3, r4, r5, lr}
+ 124              	.LCFI1:
+ 125              		.cfi_def_cfa_offset 16
+ 126              		.cfi_offset 14, -4
+ 127              		.cfi_offset 5, -8
+ 128              		.cfi_offset 4, -12
+ 129              		.cfi_offset 3, -16
+ 187:../LPCUSB/msc_bot.c ****     int iChunk;
+ 188:../LPCUSB/msc_bot.c **** 
+ 189:../LPCUSB/msc_bot.c ****     // process data for host in SCSI layer
+ 190:../LPCUSB/msc_bot.c ****     pbData = SCSIHandleData(CBW.CBWCB, CBW.bCBWCBLength, pbData, dwOffset);
+ 130              		.loc 1 190 0
+ 131 0080 94409FE5 		ldr	r4, .L17
+ 132 0084 382084E2 		add	r2, r4, #56
+ 133 0088 0E10D4E5 		ldrb	r1, [r4, #14]	@ zero_extendqisi2
+ 134 008c 0F0084E2 		add	r0, r4, #15
+ 135 0090 0C0092E8 		ldmia	r2, {r2, r3}
+ 136 0094 FEFFFFEB 		bl	SCSIHandleData
+ 191:../LPCUSB/msc_bot.c ****     if (pbData == NULL)
+ 137              		.loc 1 191 0
+ 138 0098 000050E3 		cmp	r0, #0
+ 190:../LPCUSB/msc_bot.c ****     pbData = SCSIHandleData(CBW.CBWCB, CBW.bCBWCBLength, pbData, dwOffset);
+ 139              		.loc 1 190 0
+ 140 009c 0010A0E1 		mov	r1, r0
+ 141 00a0 380084E5 		str	r0, [r4, #56]
+ 142              		.loc 1 191 0
+ 143 00a4 0200001A 		bne	.L12
+ 192:../LPCUSB/msc_bot.c ****     {
+ 193:../LPCUSB/msc_bot.c ****         BOTStall();
+ 144              		.loc 1 193 0
+ 145 00a8 E4FFFFEB 		bl	BOTStall
+ 194:../LPCUSB/msc_bot.c ****         SendCSW(STATUS_FAILED);
+ 146              		.loc 1 194 0
+ 147 00ac 0100A0E3 		mov	r0, #1
+ 148 00b0 150000EA 		b	.L16
+ 149              	.L12:
+ 195:../LPCUSB/msc_bot.c ****         return;
+ 196:../LPCUSB/msc_bot.c ****     }
+ 197:../LPCUSB/msc_bot.c **** 
+ 198:../LPCUSB/msc_bot.c ****     // send data to host?
+ 199:../LPCUSB/msc_bot.c ****     if (dwOffset < dwTransferSize)
+ 150              		.loc 1 199 0
+ 151 00b4 3C3094E5 		ldr	r3, [r4, #60]
+ 152 00b8 205094E5 		ldr	r5, [r4, #32]
+ 153 00bc 050053E1 		cmp	r3, r5
+ 154 00c0 0800002A 		bcs	.L13
+ 200:../LPCUSB/msc_bot.c ****     {
+ 201:../LPCUSB/msc_bot.c ****         iChunk = MIN(64, dwTransferSize - dwOffset);
+ 155              		.loc 1 201 0
+ 156 00c4 055063E0 		rsb	r5, r3, r5
+ 157 00c8 400055E3 		cmp	r5, #64
+ 158 00cc 4050A023 		movcs	r5, #64
+ 159              	.LVL3:
+ 202:../LPCUSB/msc_bot.c ****         USBHwEPWrite(MSC_BULK_IN_EP, pbData, iChunk);
+ 160              		.loc 1 202 0
+ 161 00d0 0520A0E1 		mov	r2, r5
+ 162 00d4 8500A0E3 		mov	r0, #133
+ 163 00d8 FEFFFFEB 		bl	USBHwEPWrite
+ 203:../LPCUSB/msc_bot.c ****         dwOffset += iChunk;
+ 164              		.loc 1 203 0
+ 165 00dc 3C3094E5 		ldr	r3, [r4, #60]
+ 166 00e0 035085E0 		add	r5, r5, r3
+ 167              	.LVL4:
+ 168 00e4 3C5084E5 		str	r5, [r4, #60]
+ 169              	.L13:
+ 204:../LPCUSB/msc_bot.c ****     }
+ 205:../LPCUSB/msc_bot.c **** 
+ 206:../LPCUSB/msc_bot.c ****     // are we done now?
+ 207:../LPCUSB/msc_bot.c ****     if (dwOffset == dwTransferSize)
+ 170              		.loc 1 207 0
+ 171 00e8 2C309FE5 		ldr	r3, .L17
+ 172 00ec 3C2093E5 		ldr	r2, [r3, #60]
+ 173 00f0 201093E5 		ldr	r1, [r3, #32]
+ 174 00f4 010052E1 		cmp	r2, r1
+ 175 00f8 0500001A 		bne	.L11
+ 208:../LPCUSB/msc_bot.c ****     {
+ 209:../LPCUSB/msc_bot.c ****         if (dwOffset != CBW.dwCBWDataTransferLength)
+ 176              		.loc 1 209 0
+ 177 00fc 083093E5 		ldr	r3, [r3, #8]
+ 178 0100 030052E1 		cmp	r2, r3
+ 210:../LPCUSB/msc_bot.c ****         {
+ 211:../LPCUSB/msc_bot.c ****             // stall pipe
+ 212:../LPCUSB/msc_bot.c ****             DBG("stalling DIN");
+ 213:../LPCUSB/msc_bot.c ****             BOTStall();
+ 179              		.loc 1 213 0
+ 180 0104 CDFFFF1B 		blne	BOTStall
+ 181              	.L15:
+ 214:../LPCUSB/msc_bot.c ****         }
+ 215:../LPCUSB/msc_bot.c ****         // done
+ 216:../LPCUSB/msc_bot.c ****         SendCSW(STATUS_PASSED);
+ 182              		.loc 1 216 0
+ 183 0108 0000A0E3 		mov	r0, #0
+ 184              	.L16:
+ 217:../LPCUSB/msc_bot.c ****     }
+ 218:../LPCUSB/msc_bot.c **** }
+ 185              		.loc 1 218 0
+ 186 010c 3840BDE8 		ldmfd	sp!, {r3, r4, r5, lr}
+ 216:../LPCUSB/msc_bot.c ****         SendCSW(STATUS_PASSED);
+ 187              		.loc 1 216 0
+ 188 0110 BAFFFFEA 		b	SendCSW
+ 189              	.L11:
+ 190              		.loc 1 218 0
+ 191 0114 3840BDE8 		ldmfd	sp!, {r3, r4, r5, lr}
+ 192 0118 1EFF2FE1 		bx	lr
+ 193              	.L18:
+ 194              		.align	2
+ 195              	.L17:
+ 196 011c 00000000 		.word	.LANCHOR0
+ 197              		.cfi_endproc
+ 198              	.LFE4:
+ 200              		.align	2
+ 201              		.global	MSCBotReset
+ 203              	MSCBotReset:
+ 204              	.LFB0:
+  88:../LPCUSB/msc_bot.c **** {
+ 205              		.loc 1 88 0
+ 206              		.cfi_startproc
+ 207              		@ Function supports interworking.
+ 208              		@ args = 0, pretend = 0, frame = 0
+ 209              		@ frame_needed = 0, uses_anonymous_args = 0
+ 210 0120 08402DE9 		stmfd	sp!, {r3, lr}
+ 211              	.LCFI2:
+ 212              		.cfi_def_cfa_offset 8
+ 213              		.cfi_offset 14, -4
+ 214              		.cfi_offset 3, -8
+  91:../LPCUSB/msc_bot.c ****     eState = eCBW;
+ 215              		.loc 1 91 0
+ 216 0124 10309FE5 		ldr	r3, .L20
+ 217 0128 0020A0E3 		mov	r2, #0
+ 218 012c 3420C3E5 		strb	r2, [r3, #52]
+  93:../LPCUSB/msc_bot.c ****     SCSIReset();
+ 219              		.loc 1 93 0
+ 220 0130 FEFFFFEB 		bl	SCSIReset
+  94:../LPCUSB/msc_bot.c **** }
+ 221              		.loc 1 94 0
+ 222 0134 0840BDE8 		ldmfd	sp!, {r3, lr}
+ 223 0138 1EFF2FE1 		bx	lr
+ 224              	.L21:
+ 225              		.align	2
+ 226              	.L20:
+ 227 013c 00000000 		.word	.LANCHOR0
+ 228              		.cfi_endproc
+ 229              	.LFE0:
+ 231              		.align	2
+ 232              		.global	MSCBotBulkOut
+ 234              	MSCBotBulkOut:
+ 235              	.LFB6:
+ 219:../LPCUSB/msc_bot.c **** 
+ 220:../LPCUSB/msc_bot.c **** 
+ 221:../LPCUSB/msc_bot.c **** /*************************************************************************
+ 222:../LPCUSB/msc_bot.c ****     HandleDataOut
+ 223:../LPCUSB/msc_bot.c ****     =============
+ 224:../LPCUSB/msc_bot.c ****         Handles data from host-to-device
+ 225:../LPCUSB/msc_bot.c **** 
+ 226:../LPCUSB/msc_bot.c **** **************************************************************************/
+ 227:../LPCUSB/msc_bot.c **** static void HandleDataOut(void)
+ 228:../LPCUSB/msc_bot.c **** {
+ 229:../LPCUSB/msc_bot.c ****     int iChunk;
+ 230:../LPCUSB/msc_bot.c **** 
+ 231:../LPCUSB/msc_bot.c ****     if (dwOffset < dwTransferSize)
+ 232:../LPCUSB/msc_bot.c ****     {
+ 233:../LPCUSB/msc_bot.c ****         // get data from host
+ 234:../LPCUSB/msc_bot.c ****         iChunk = USBHwEPRead(MSC_BULK_OUT_EP, pbData, dwTransferSize - dwOffset);
+ 235:../LPCUSB/msc_bot.c ****         // process data in SCSI layer
+ 236:../LPCUSB/msc_bot.c ****         pbData = SCSIHandleData(CBW.CBWCB, CBW.bCBWCBLength, pbData, dwOffset);
+ 237:../LPCUSB/msc_bot.c ****         if (pbData == NULL)
+ 238:../LPCUSB/msc_bot.c ****         {
+ 239:../LPCUSB/msc_bot.c ****             BOTStall();
+ 240:../LPCUSB/msc_bot.c ****             SendCSW(STATUS_FAILED);
+ 241:../LPCUSB/msc_bot.c ****             return;
+ 242:../LPCUSB/msc_bot.c ****         }
+ 243:../LPCUSB/msc_bot.c ****         dwOffset += iChunk;
+ 244:../LPCUSB/msc_bot.c ****     }
+ 245:../LPCUSB/msc_bot.c **** 
+ 246:../LPCUSB/msc_bot.c ****     // are we done now?
+ 247:../LPCUSB/msc_bot.c ****     if (dwOffset == dwTransferSize)
+ 248:../LPCUSB/msc_bot.c ****     {
+ 249:../LPCUSB/msc_bot.c ****         if (dwOffset != CBW.dwCBWDataTransferLength)
+ 250:../LPCUSB/msc_bot.c ****         {
+ 251:../LPCUSB/msc_bot.c ****             // stall pipe
+ 252:../LPCUSB/msc_bot.c ****             DBG("stalling DOUT");
+ 253:../LPCUSB/msc_bot.c ****             BOTStall();
+ 254:../LPCUSB/msc_bot.c ****         }
+ 255:../LPCUSB/msc_bot.c ****         SendCSW(STATUS_PASSED);
+ 256:../LPCUSB/msc_bot.c ****     }
+ 257:../LPCUSB/msc_bot.c **** }
+ 258:../LPCUSB/msc_bot.c **** 
+ 259:../LPCUSB/msc_bot.c **** 
+ 260:../LPCUSB/msc_bot.c **** /*************************************************************************
+ 261:../LPCUSB/msc_bot.c ****     MSCBotBulkOut
+ 262:../LPCUSB/msc_bot.c ****     ===============
+ 263:../LPCUSB/msc_bot.c ****         Handles the BOT bulk OUT endpoint
+ 264:../LPCUSB/msc_bot.c **** 
+ 265:../LPCUSB/msc_bot.c ****     IN      bEP         Endpoint number
+ 266:../LPCUSB/msc_bot.c ****             bEPStatus   Endpoint status (indicates NAK, STALL, etc)
+ 267:../LPCUSB/msc_bot.c **** 
+ 268:../LPCUSB/msc_bot.c **** **************************************************************************/
+ 269:../LPCUSB/msc_bot.c **** void MSCBotBulkOut(U8 bEP, U8 bEPStatus)
+ 270:../LPCUSB/msc_bot.c **** {
+ 236              		.loc 1 270 0
+ 237              		.cfi_startproc
+ 238              		@ Function supports interworking.
+ 239              		@ args = 0, pretend = 0, frame = 8
+ 240              		@ frame_needed = 0, uses_anonymous_args = 0
+ 241              	.LVL5:
+ 271:../LPCUSB/msc_bot.c ****     int     iLen, iChunk;
+ 272:../LPCUSB/msc_bot.c ****     BOOL    fHostIn, fDevIn;
+ 273:../LPCUSB/msc_bot.c **** 
+ 274:../LPCUSB/msc_bot.c ****     // ignore events on stalled EP
+ 275:../LPCUSB/msc_bot.c ****     if (bEPStatus & EP_STATUS_STALLED)
+ 242              		.loc 1 275 0
+ 243 0140 020011E3 		tst	r1, #2
+ 270:../LPCUSB/msc_bot.c **** {
+ 244              		.loc 1 270 0
+ 245 0144 37402DE9 		stmfd	sp!, {r0, r1, r2, r4, r5, lr}
+ 246              	.LCFI3:
+ 247              		.cfi_def_cfa_offset 24
+ 248              		.cfi_offset 14, -4
+ 249              		.cfi_offset 5, -8
+ 250              		.cfi_offset 4, -12
+ 251              		.cfi_offset 2, -16
+ 252              		.cfi_offset 1, -20
+ 253              		.cfi_offset 0, -24
+ 254              		.loc 1 275 0
+ 255 0148 7C00001A 		bne	.L22
+ 276:../LPCUSB/msc_bot.c ****     {
+ 277:../LPCUSB/msc_bot.c ****         return;
+ 278:../LPCUSB/msc_bot.c ****     }
+ 279:../LPCUSB/msc_bot.c **** 
+ 280:../LPCUSB/msc_bot.c ****     switch (eState)
+ 256              		.loc 1 280 0
+ 257 014c F4519FE5 		ldr	r5, .L47
+ 258 0150 3430D5E5 		ldrb	r3, [r5, #52]	@ zero_extendqisi2
+ 259 0154 040053E3 		cmp	r3, #4
+ 260 0158 03F19F97 		ldrls	pc, [pc, r3, asl #2]
+ 261 015c 770000EA 		b	.L22
+ 262              	.L28:
+ 263 0160 74010000 		.word	.L24
+ 264 0164 60020000 		.word	.L25
+ 265 0168 EC020000 		.word	.L26
+ 266 016c EC020000 		.word	.L26
+ 267 0170 04030000 		.word	.L27
+ 268              	.L24:
+ 281:../LPCUSB/msc_bot.c ****     {
+ 282:../LPCUSB/msc_bot.c **** 
+ 283:../LPCUSB/msc_bot.c ****         case eCBW:
+ 284:../LPCUSB/msc_bot.c ****             iLen = USBHwEPRead(bEP, (U8 *)&CBW, sizeof(CBW));
+ 269              		.loc 1 284 0
+ 270 0174 CC419FE5 		ldr	r4, .L47
+ 271 0178 2020A0E3 		mov	r2, #32
+ 272 017c 0410A0E1 		mov	r1, r4
+ 273              	.LVL6:
+ 274 0180 FEFFFFEB 		bl	USBHwEPRead
+ 275              	.LVL7:
+ 276              	.LBB14:
+ 277              	.LBB15:
+ 129:../LPCUSB/msc_bot.c ****     if (iLen != 31)
+ 278              		.loc 1 129 0
+ 279 0184 1F0050E3 		cmp	r0, #31
+ 280              	.LBE15:
+ 281              	.LBE14:
+ 282              		.loc 1 284 0
+ 283 0188 00008DE5 		str	r0, [sp, #0]
+ 284              	.LVL8:
+ 285              	.LBB17:
+ 286              	.LBB16:
+ 129:../LPCUSB/msc_bot.c ****     if (iLen != 31)
+ 287              		.loc 1 129 0
+ 288 018c 0A00001A 		bne	.L29
+ 134:../LPCUSB/msc_bot.c ****     if (pCBW->dwCBWSignature != CBW_SIGNATURE)
+ 289              		.loc 1 134 0
+ 290 0190 002094E5 		ldr	r2, [r4, #0]
+ 291 0194 B0319FE5 		ldr	r3, .L47+4
+ 292 0198 030052E1 		cmp	r2, r3
+ 293 019c 0600001A 		bne	.L29
+ 141:../LPCUSB/msc_bot.c ****     if (pCBW->bCBWLun != 0)
+ 294              		.loc 1 141 0
+ 295 01a0 0D30D4E5 		ldrb	r3, [r4, #13]	@ zero_extendqisi2
+ 296 01a4 000053E3 		cmp	r3, #0
+ 297 01a8 0300001A 		bne	.L29
+ 146:../LPCUSB/msc_bot.c ****     if ((pCBW->bCBWCBLength < 1) || (pCBW->bCBWCBLength > 16))
+ 298              		.loc 1 146 0
+ 299 01ac 0E10D4E5 		ldrb	r1, [r4, #14]	@ zero_extendqisi2
+ 300 01b0 012041E2 		sub	r2, r1, #1
+ 301 01b4 0F0052E3 		cmp	r2, #15
+ 302 01b8 5500009A 		bls	.L30
+ 303              	.L29:
+ 304              	.LBE16:
+ 305              	.LBE17:
+ 285:../LPCUSB/msc_bot.c **** 
+ 286:../LPCUSB/msc_bot.c ****             // check if we got a good CBW
+ 287:../LPCUSB/msc_bot.c ****             if (!CheckCBW(&CBW, iLen))
+ 288:../LPCUSB/msc_bot.c ****             {
+ 289:../LPCUSB/msc_bot.c ****                 // see 6.6.1
+ 290:../LPCUSB/msc_bot.c ****                 USBHwEPStall(MSC_BULK_IN_EP, TRUE);
+ 306              		.loc 1 290 0
+ 307 01bc 8500A0E3 		mov	r0, #133
+ 308              	.LVL9:
+ 309 01c0 0110A0E3 		mov	r1, #1
+ 310 01c4 FEFFFFEB 		bl	USBHwEPStall
+ 311              	.LVL10:
+ 291:../LPCUSB/msc_bot.c ****                 USBHwEPStall(MSC_BULK_OUT_EP, TRUE);
+ 312              		.loc 1 291 0
+ 313 01c8 0200A0E3 		mov	r0, #2
+ 314 01cc 0110A0E3 		mov	r1, #1
+ 315 01d0 FEFFFFEB 		bl	USBHwEPStall
+ 292:../LPCUSB/msc_bot.c ****                 eState = eStalled;
+ 316              		.loc 1 292 0
+ 317 01d4 0420A0E3 		mov	r2, #4
+ 318 01d8 68319FE5 		ldr	r3, .L47
+ 319 01dc 1D0000EA 		b	.L43
+ 320              	.LVL11:
+ 321              	.L42:
+ 293:../LPCUSB/msc_bot.c ****                 break;
+ 294:../LPCUSB/msc_bot.c ****             }
+ 295:../LPCUSB/msc_bot.c **** 
+ 296:../LPCUSB/msc_bot.c ****             DBG("CBW: len=%d, flags=%x, cmd=%x, cmdlen=%d\n",
+ 297:../LPCUSB/msc_bot.c ****                     CBW.dwCBWDataTransferLength, CBW.bmCBWFlags, CBW.CBWCB[0], CBW.bCBWCBLength);
+ 298:../LPCUSB/msc_bot.c **** 
+ 299:../LPCUSB/msc_bot.c ****             dwOffset = 0;
+ 300:../LPCUSB/msc_bot.c ****             dwTransferSize = 0;
+ 301:../LPCUSB/msc_bot.c ****             fHostIn = ((CBW.bmCBWFlags & 0x80) != 0);
+ 302:../LPCUSB/msc_bot.c **** 
+ 303:../LPCUSB/msc_bot.c ****             // verify request
+ 304:../LPCUSB/msc_bot.c ****             pbData = SCSIHandleCmd(CBW.CBWCB, CBW.bCBWCBLength, &iLen, &fDevIn);
+ 305:../LPCUSB/msc_bot.c ****             if (pbData == NULL)
+ 306:../LPCUSB/msc_bot.c ****             {
+ 307:../LPCUSB/msc_bot.c ****                 // unknown command
+ 308:../LPCUSB/msc_bot.c ****                 BOTStall();
+ 309:../LPCUSB/msc_bot.c ****                 SendCSW(STATUS_FAILED);
+ 310:../LPCUSB/msc_bot.c ****                 break;
+ 311:../LPCUSB/msc_bot.c ****             }
+ 312:../LPCUSB/msc_bot.c **** 
+ 313:../LPCUSB/msc_bot.c ****             // rule: if device and host disagree on direction, send CSW with status 2
+ 314:../LPCUSB/msc_bot.c ****             if ((iLen > 0) &&
+ 322              		.loc 1 314 0
+ 323 01e0 00209DE5 		ldr	r2, [sp, #0]
+ 324 01e4 000052E3 		cmp	r2, #0
+ 325 01e8 070000DA 		ble	.L31
+ 326              		.loc 1 314 0 is_stmt 0 discriminator 1
+ 327 01ec 800015E3 		tst	r5, #128
+ 328              	.LVL12:
+ 329 01f0 04309DE5 		ldr	r3, [sp, #4]
+ 330 01f4 0200000A 		beq	.L32
+ 315:../LPCUSB/msc_bot.c ****                 ((fHostIn && !fDevIn) ||
+ 331              		.loc 1 315 0 is_stmt 1
+ 332 01f8 000053E3 		cmp	r3, #0
+ 333 01fc 0200001A 		bne	.L31
+ 334 0200 060000EA 		b	.L46
+ 335              	.L32:
+ 316:../LPCUSB/msc_bot.c ****                 (!fHostIn && fDevIn)))
+ 336              		.loc 1 316 0
+ 337 0204 000053E3 		cmp	r3, #0
+ 338 0208 0400001A 		bne	.L46
+ 339              	.L31:
+ 317:../LPCUSB/msc_bot.c ****             {
+ 318:../LPCUSB/msc_bot.c ****                 DBG("Host and device disagree on direction\n");
+ 319:../LPCUSB/msc_bot.c ****                 BOTStall();
+ 320:../LPCUSB/msc_bot.c ****                 SendCSW(STATUS_PHASE_ERR);
+ 321:../LPCUSB/msc_bot.c ****                 break;
+ 322:../LPCUSB/msc_bot.c ****             }
+ 323:../LPCUSB/msc_bot.c **** 
+ 324:../LPCUSB/msc_bot.c ****             // rule: if D > H, send CSW with status 2
+ 325:../LPCUSB/msc_bot.c ****             if (iLen > CBW.dwCBWDataTransferLength)
+ 340              		.loc 1 325 0
+ 341 020c 34319FE5 		ldr	r3, .L47
+ 342 0210 081093E5 		ldr	r1, [r3, #8]
+ 343 0214 010052E1 		cmp	r2, r1
+ 344 0218 0310A0E1 		mov	r1, r3
+ 345 021c 0200009A 		bls	.L34
+ 346              	.L46:
+ 326:../LPCUSB/msc_bot.c ****             {
+ 327:../LPCUSB/msc_bot.c ****                 DBG("Negative residue\n");
+ 328:../LPCUSB/msc_bot.c ****                 BOTStall();
+ 347              		.loc 1 328 0
+ 348 0220 86FFFFEB 		bl	BOTStall
+ 329:../LPCUSB/msc_bot.c ****                 SendCSW(STATUS_PHASE_ERR);
+ 349              		.loc 1 329 0
+ 350 0224 0200A0E3 		mov	r0, #2
+ 351 0228 2D0000EA 		b	.L44
+ 352              	.L34:
+ 330:../LPCUSB/msc_bot.c ****                 break;
+ 331:../LPCUSB/msc_bot.c ****             }
+ 332:../LPCUSB/msc_bot.c **** 
+ 333:../LPCUSB/msc_bot.c ****             dwTransferSize = iLen;
+ 334:../LPCUSB/msc_bot.c ****             if ((dwTransferSize == 0) || fDevIn)
+ 353              		.loc 1 334 0
+ 354 022c 000052E3 		cmp	r2, #0
+ 333:../LPCUSB/msc_bot.c ****             dwTransferSize = iLen;
+ 355              		.loc 1 333 0
+ 356 0230 202083E5 		str	r2, [r3, #32]
+ 357              		.loc 1 334 0
+ 358 0234 0300000A 		beq	.L35
+ 359              		.loc 1 334 0 is_stmt 0 discriminator 1
+ 360 0238 04209DE5 		ldr	r2, [sp, #4]
+ 361 023c 000052E3 		cmp	r2, #0
+ 335:../LPCUSB/msc_bot.c ****             {
+ 336:../LPCUSB/msc_bot.c ****                 // data from device-to-host
+ 337:../LPCUSB/msc_bot.c ****                 eState = eDataIn;
+ 338:../LPCUSB/msc_bot.c ****                 HandleDataIn();
+ 339:../LPCUSB/msc_bot.c ****             }
+ 340:../LPCUSB/msc_bot.c ****             else
+ 341:../LPCUSB/msc_bot.c ****             {
+ 342:../LPCUSB/msc_bot.c ****                 // data from host-to-device
+ 343:../LPCUSB/msc_bot.c ****                 eState = eDataOut;
+ 362              		.loc 1 343 0 is_stmt 1 discriminator 1
+ 363 0240 0120A003 		moveq	r2, #1
+ 334:../LPCUSB/msc_bot.c ****             if ((dwTransferSize == 0) || fDevIn)
+ 364              		.loc 1 334 0 discriminator 1
+ 365 0244 0300000A 		beq	.L43
+ 366              	.L35:
+ 337:../LPCUSB/msc_bot.c ****                 eState = eDataIn;
+ 367              		.loc 1 337 0
+ 368 0248 0230A0E3 		mov	r3, #2
+ 369 024c 3430C1E5 		strb	r3, [r1, #52]
+ 338:../LPCUSB/msc_bot.c ****                 HandleDataIn();
+ 370              		.loc 1 338 0
+ 371 0250 89FFFFEB 		bl	HandleDataIn
+ 372 0254 390000EA 		b	.L22
+ 373              	.LVL13:
+ 374              	.L43:
+ 375              		.loc 1 343 0
+ 376 0258 3420C3E5 		strb	r2, [r3, #52]
+ 377 025c 370000EA 		b	.L22
+ 378              	.LVL14:
+ 379              	.L25:
+ 380              	.LBB18:
+ 381              	.LBB19:
+ 231:../LPCUSB/msc_bot.c ****     if (dwOffset < dwTransferSize)
+ 382              		.loc 1 231 0
+ 383 0260 3C3095E5 		ldr	r3, [r5, #60]
+ 384 0264 202095E5 		ldr	r2, [r5, #32]
+ 385 0268 020053E1 		cmp	r3, r2
+ 386 026c D4409FE5 		ldr	r4, .L47
+ 387 0270 1200002A 		bcs	.L37
+ 234:../LPCUSB/msc_bot.c ****         iChunk = USBHwEPRead(MSC_BULK_OUT_EP, pbData, dwTransferSize - dwOffset);
+ 388              		.loc 1 234 0
+ 389 0274 022063E0 		rsb	r2, r3, r2
+ 390 0278 381094E5 		ldr	r1, [r4, #56]
+ 391              	.LVL15:
+ 392 027c 0200A0E3 		mov	r0, #2
+ 393              	.LVL16:
+ 394 0280 FEFFFFEB 		bl	USBHwEPRead
+ 236:../LPCUSB/msc_bot.c ****         pbData = SCSIHandleData(CBW.CBWCB, CBW.bCBWCBLength, pbData, dwOffset);
+ 395              		.loc 1 236 0
+ 396 0284 382084E2 		add	r2, r4, #56
+ 234:../LPCUSB/msc_bot.c ****         iChunk = USBHwEPRead(MSC_BULK_OUT_EP, pbData, dwTransferSize - dwOffset);
+ 397              		.loc 1 234 0
+ 398 0288 0050A0E1 		mov	r5, r0
+ 399              	.LVL17:
+ 236:../LPCUSB/msc_bot.c ****         pbData = SCSIHandleData(CBW.CBWCB, CBW.bCBWCBLength, pbData, dwOffset);
+ 400              		.loc 1 236 0
+ 401 028c 0C0092E8 		ldmia	r2, {r2, r3}
+ 402 0290 0F0084E2 		add	r0, r4, #15
+ 403              	.LVL18:
+ 404 0294 0E10D4E5 		ldrb	r1, [r4, #14]	@ zero_extendqisi2
+ 405 0298 FEFFFFEB 		bl	SCSIHandleData
+ 237:../LPCUSB/msc_bot.c ****         if (pbData == NULL)
+ 406              		.loc 1 237 0
+ 407 029c 000050E3 		cmp	r0, #0
+ 243:../LPCUSB/msc_bot.c ****         dwOffset += iChunk;
+ 408              		.loc 1 243 0
+ 409 02a0 3C309415 		ldrne	r3, [r4, #60]
+ 410 02a4 03508510 		addne	r5, r5, r3
+ 411              	.LVL19:
+ 236:../LPCUSB/msc_bot.c ****         pbData = SCSIHandleData(CBW.CBWCB, CBW.bCBWCBLength, pbData, dwOffset);
+ 412              		.loc 1 236 0
+ 413 02a8 380084E5 		str	r0, [r4, #56]
+ 243:../LPCUSB/msc_bot.c ****         dwOffset += iChunk;
+ 414              		.loc 1 243 0
+ 415 02ac 3C508415 		strne	r5, [r4, #60]
+ 237:../LPCUSB/msc_bot.c ****         if (pbData == NULL)
+ 416              		.loc 1 237 0
+ 417 02b0 0200001A 		bne	.L37
+ 418              	.LVL20:
+ 419              	.L45:
+ 239:../LPCUSB/msc_bot.c ****             BOTStall();
+ 420              		.loc 1 239 0
+ 421 02b4 61FFFFEB 		bl	BOTStall
+ 240:../LPCUSB/msc_bot.c ****             SendCSW(STATUS_FAILED);
+ 422              		.loc 1 240 0
+ 423 02b8 0100A0E3 		mov	r0, #1
+ 424 02bc 080000EA 		b	.L44
+ 425              	.LVL21:
+ 426              	.L37:
+ 247:../LPCUSB/msc_bot.c ****     if (dwOffset == dwTransferSize)
+ 427              		.loc 1 247 0
+ 428 02c0 80309FE5 		ldr	r3, .L47
+ 429 02c4 3C2093E5 		ldr	r2, [r3, #60]
+ 430 02c8 201093E5 		ldr	r1, [r3, #32]
+ 431 02cc 010052E1 		cmp	r2, r1
+ 432 02d0 1A00001A 		bne	.L22
+ 249:../LPCUSB/msc_bot.c ****         if (dwOffset != CBW.dwCBWDataTransferLength)
+ 433              		.loc 1 249 0
+ 434 02d4 083093E5 		ldr	r3, [r3, #8]
+ 435 02d8 030052E1 		cmp	r2, r3
+ 253:../LPCUSB/msc_bot.c ****             BOTStall();
+ 436              		.loc 1 253 0
+ 437 02dc 57FFFF1B 		blne	BOTStall
+ 438              	.L39:
+ 255:../LPCUSB/msc_bot.c ****         SendCSW(STATUS_PASSED);
+ 439              		.loc 1 255 0
+ 440 02e0 0000A0E3 		mov	r0, #0
+ 441              	.LVL22:
+ 442              	.L44:
+ 443 02e4 45FFFFEB 		bl	SendCSW
+ 444 02e8 140000EA 		b	.L22
+ 445              	.LVL23:
+ 446              	.L26:
+ 447              	.LBE19:
+ 448              	.LBE18:
+ 344:../LPCUSB/msc_bot.c ****             }
+ 345:../LPCUSB/msc_bot.c ****             break;
+ 346:../LPCUSB/msc_bot.c **** 
+ 347:../LPCUSB/msc_bot.c ****         case eDataOut:
+ 348:../LPCUSB/msc_bot.c ****             HandleDataOut();
+ 349:../LPCUSB/msc_bot.c ****             break;
+ 350:../LPCUSB/msc_bot.c **** 
+ 351:../LPCUSB/msc_bot.c ****         case eDataIn:
+ 352:../LPCUSB/msc_bot.c ****         case eCSW:
+ 353:../LPCUSB/msc_bot.c ****             iChunk = USBHwEPRead(bEP, NULL, 0);
+ 449              		.loc 1 353 0
+ 450 02ec 0010A0E3 		mov	r1, #0
+ 451              	.LVL24:
+ 452 02f0 0120A0E1 		mov	r2, r1
+ 453 02f4 FEFFFFEB 		bl	USBHwEPRead
+ 454              	.LVL25:
+ 354:../LPCUSB/msc_bot.c ****             DBG("Phase error in state %d, %d bytes\n", eState, iChunk);
+ 355:../LPCUSB/msc_bot.c ****             eState = eCBW;
+ 455              		.loc 1 355 0
+ 456 02f8 0030A0E3 		mov	r3, #0
+ 457 02fc 3430C5E5 		strb	r3, [r5, #52]
+ 356:../LPCUSB/msc_bot.c ****             break;
+ 458              		.loc 1 356 0
+ 459 0300 0E0000EA 		b	.L22
+ 460              	.LVL26:
+ 461              	.L27:
+ 357:../LPCUSB/msc_bot.c **** 
+ 358:../LPCUSB/msc_bot.c ****         case eStalled:
+ 359:../LPCUSB/msc_bot.c ****         // keep stalling
+ 360:../LPCUSB/msc_bot.c ****             USBHwEPStall(MSC_BULK_OUT_EP, TRUE);
+ 462              		.loc 1 360 0
+ 463 0304 0200A0E3 		mov	r0, #2
+ 464              	.LVL27:
+ 465 0308 0110A0E3 		mov	r1, #1
+ 466              	.LVL28:
+ 467 030c FEFFFFEB 		bl	USBHwEPStall
+ 361:../LPCUSB/msc_bot.c ****             break;
+ 468              		.loc 1 361 0
+ 469 0310 0A0000EA 		b	.L22
+ 470              	.LVL29:
+ 471              	.L30:
+ 299:../LPCUSB/msc_bot.c ****             dwOffset = 0;
+ 472              		.loc 1 299 0
+ 473 0314 3C3084E5 		str	r3, [r4, #60]
+ 300:../LPCUSB/msc_bot.c ****             dwTransferSize = 0;
+ 474              		.loc 1 300 0
+ 475 0318 203084E5 		str	r3, [r4, #32]
+ 304:../LPCUSB/msc_bot.c ****             pbData = SCSIHandleCmd(CBW.CBWCB, CBW.bCBWCBLength, &iLen, &fDevIn);
+ 476              		.loc 1 304 0
+ 477 031c 0F0084E2 		add	r0, r4, #15
+ 478              	.LVL30:
+ 479 0320 0D20A0E1 		mov	r2, sp
+ 480              	.LVL31:
+ 481 0324 04308DE2 		add	r3, sp, #4
+ 301:../LPCUSB/msc_bot.c ****             fHostIn = ((CBW.bmCBWFlags & 0x80) != 0);
+ 482              		.loc 1 301 0
+ 483 0328 0C50D4E5 		ldrb	r5, [r4, #12]	@ zero_extendqisi2
+ 484              	.LVL32:
+ 304:../LPCUSB/msc_bot.c ****             pbData = SCSIHandleCmd(CBW.CBWCB, CBW.bCBWCBLength, &iLen, &fDevIn);
+ 485              		.loc 1 304 0
+ 486 032c FEFFFFEB 		bl	SCSIHandleCmd
+ 487              	.LVL33:
+ 305:../LPCUSB/msc_bot.c ****             if (pbData == NULL)
+ 488              		.loc 1 305 0
+ 489 0330 000050E3 		cmp	r0, #0
+ 304:../LPCUSB/msc_bot.c ****             pbData = SCSIHandleCmd(CBW.CBWCB, CBW.bCBWCBLength, &iLen, &fDevIn);
+ 490              		.loc 1 304 0
+ 491 0334 380084E5 		str	r0, [r4, #56]
+ 305:../LPCUSB/msc_bot.c ****             if (pbData == NULL)
+ 492              		.loc 1 305 0
+ 493 0338 A8FFFF1A 		bne	.L42
+ 494 033c DCFFFFEA 		b	.L45
+ 495              	.LVL34:
+ 496              	.L22:
+ 362:../LPCUSB/msc_bot.c **** 
+ 363:../LPCUSB/msc_bot.c ****         default:
+ 364:../LPCUSB/msc_bot.c ****             DBG("Invalid state %d\n", eState);
+ 365:../LPCUSB/msc_bot.c **** //            ASSERT(FALSE);
+ 366:../LPCUSB/msc_bot.c ****             break;
+ 367:../LPCUSB/msc_bot.c ****     }
+ 368:../LPCUSB/msc_bot.c **** }
+ 497              		.loc 1 368 0
+ 498 0340 3E40BDE8 		ldmfd	sp!, {r1, r2, r3, r4, r5, lr}
+ 499 0344 1EFF2FE1 		bx	lr
+ 500              	.L48:
+ 501              		.align	2
+ 502              	.L47:
+ 503 0348 00000000 		.word	.LANCHOR0
+ 504 034c 55534243 		.word	1128420181
+ 505              		.cfi_endproc
+ 506              	.LFE6:
+ 508              		.align	2
+ 509              		.global	MSCBotBulkIn
+ 511              	MSCBotBulkIn:
+ 512              	.LFB7:
+ 369:../LPCUSB/msc_bot.c **** 
+ 370:../LPCUSB/msc_bot.c **** 
+ 371:../LPCUSB/msc_bot.c **** /*************************************************************************
+ 372:../LPCUSB/msc_bot.c ****     MSCBotBulkIn
+ 373:../LPCUSB/msc_bot.c ****     ============
+ 374:../LPCUSB/msc_bot.c ****         Handles the BOT bulk IN endpoint
+ 375:../LPCUSB/msc_bot.c **** 
+ 376:../LPCUSB/msc_bot.c ****     IN      bEP         Endpoint number
+ 377:../LPCUSB/msc_bot.c ****             bEPStatus   Endpoint status (indicates NAK, STALL, etc)
+ 378:../LPCUSB/msc_bot.c **** 
+ 379:../LPCUSB/msc_bot.c **** **************************************************************************/
+ 380:../LPCUSB/msc_bot.c **** void MSCBotBulkIn(U8 bEP, U8 bEPStatus)
+ 381:../LPCUSB/msc_bot.c **** {
+ 513              		.loc 1 381 0
+ 514              		.cfi_startproc
+ 515              		@ Function supports interworking.
+ 516              		@ args = 0, pretend = 0, frame = 0
+ 517              		@ frame_needed = 0, uses_anonymous_args = 0
+ 518              	.LVL35:
+ 519 0350 38402DE9 		stmfd	sp!, {r3, r4, r5, lr}
+ 520              	.LCFI4:
+ 521              		.cfi_def_cfa_offset 16
+ 522              		.cfi_offset 14, -4
+ 523              		.cfi_offset 5, -8
+ 524              		.cfi_offset 4, -12
+ 525              		.cfi_offset 3, -16
+ 382:../LPCUSB/msc_bot.c ****     // ignore events on stalled EP
+ 383:../LPCUSB/msc_bot.c ****     if (bEPStatus & EP_STATUS_STALLED)
+ 526              		.loc 1 383 0
+ 527 0354 025011E2 		ands	r5, r1, #2
+ 528 0358 1200001A 		bne	.L49
+ 384:../LPCUSB/msc_bot.c ****     {
+ 385:../LPCUSB/msc_bot.c ****         return;
+ 386:../LPCUSB/msc_bot.c ****     }
+ 387:../LPCUSB/msc_bot.c **** 
+ 388:../LPCUSB/msc_bot.c ****     switch (eState)
+ 529              		.loc 1 388 0
+ 530 035c 4C409FE5 		ldr	r4, .L54
+ 531 0360 3430D4E5 		ldrb	r3, [r4, #52]	@ zero_extendqisi2
+ 532 0364 030053E3 		cmp	r3, #3
+ 533 0368 0500000A 		beq	.L52
+ 534 036c 040053E3 		cmp	r3, #4
+ 535 0370 0900000A 		beq	.L53
+ 536 0374 020053E3 		cmp	r3, #2
+ 537 0378 0A00001A 		bne	.L49
+ 389:../LPCUSB/msc_bot.c ****     {
+ 390:../LPCUSB/msc_bot.c **** 
+ 391:../LPCUSB/msc_bot.c ****         case eCBW:
+ 392:../LPCUSB/msc_bot.c ****         case eDataOut:
+ 393:../LPCUSB/msc_bot.c ****         // ignore possibly old ACKs
+ 394:../LPCUSB/msc_bot.c ****             break;
+ 395:../LPCUSB/msc_bot.c **** 
+ 396:../LPCUSB/msc_bot.c ****         case eDataIn:
+ 397:../LPCUSB/msc_bot.c ****             HandleDataIn();
+ 398:../LPCUSB/msc_bot.c ****             break;
+ 399:../LPCUSB/msc_bot.c **** 
+ 400:../LPCUSB/msc_bot.c ****         case eCSW:
+ 401:../LPCUSB/msc_bot.c ****         // wait for an IN token, then send the CSW
+ 402:../LPCUSB/msc_bot.c ****             USBHwEPWrite(MSC_BULK_IN_EP, (U8 *)&CSW, 13);
+ 403:../LPCUSB/msc_bot.c ****             eState = eCBW;
+ 404:../LPCUSB/msc_bot.c ****             break;
+ 405:../LPCUSB/msc_bot.c **** 
+ 406:../LPCUSB/msc_bot.c ****         case eStalled:
+ 407:../LPCUSB/msc_bot.c ****         // keep stalling
+ 408:../LPCUSB/msc_bot.c ****             USBHwEPStall(MSC_BULK_IN_EP, TRUE);
+ 409:../LPCUSB/msc_bot.c ****             break;
+ 410:../LPCUSB/msc_bot.c **** 
+ 411:../LPCUSB/msc_bot.c ****         default:
+ 412:../LPCUSB/msc_bot.c ****             DBG("Invalid state %d\n", eState);
+ 413:../LPCUSB/msc_bot.c **** //            ASSERT(FALSE);
+ 414:../LPCUSB/msc_bot.c ****             break;
+ 415:../LPCUSB/msc_bot.c ****     }
+ 416:../LPCUSB/msc_bot.c **** }
+ 538              		.loc 1 416 0
+ 539 037c 3840BDE8 		ldmfd	sp!, {r3, r4, r5, lr}
+ 397:../LPCUSB/msc_bot.c ****             HandleDataIn();
+ 540              		.loc 1 397 0
+ 541 0380 3DFFFFEA 		b	HandleDataIn
+ 542              	.LVL36:
+ 543              	.L52:
+ 402:../LPCUSB/msc_bot.c ****             USBHwEPWrite(MSC_BULK_IN_EP, (U8 *)&CSW, 13);
+ 544              		.loc 1 402 0
+ 545 0384 8500A0E3 		mov	r0, #133
+ 546              	.LVL37:
+ 547 0388 241084E2 		add	r1, r4, #36
+ 548              	.LVL38:
+ 549 038c 0D20A0E3 		mov	r2, #13
+ 550 0390 FEFFFFEB 		bl	USBHwEPWrite
+ 403:../LPCUSB/msc_bot.c ****             eState = eCBW;
+ 551              		.loc 1 403 0
+ 552 0394 3450C4E5 		strb	r5, [r4, #52]
+ 404:../LPCUSB/msc_bot.c ****             break;
+ 553              		.loc 1 404 0
+ 554 0398 020000EA 		b	.L49
+ 555              	.LVL39:
+ 556              	.L53:
+ 408:../LPCUSB/msc_bot.c ****             USBHwEPStall(MSC_BULK_IN_EP, TRUE);
+ 557              		.loc 1 408 0
+ 558 039c 8500A0E3 		mov	r0, #133
+ 559              	.LVL40:
+ 560 03a0 0110A0E3 		mov	r1, #1
+ 561              	.LVL41:
+ 562 03a4 FEFFFFEB 		bl	USBHwEPStall
+ 563              	.L49:
+ 564              		.loc 1 416 0
+ 565 03a8 3840BDE8 		ldmfd	sp!, {r3, r4, r5, lr}
+ 566 03ac 1EFF2FE1 		bx	lr
+ 567              	.L55:
+ 568              		.align	2
+ 569              	.L54:
+ 570 03b0 00000000 		.word	.LANCHOR0
+ 571              		.cfi_endproc
+ 572              	.LFE7:
+ 574              		.bss
+ 575              		.align	2
+ 576              		.set	.LANCHOR0,. + 0
+ 579              	CBW:
+ 580 0000 00000000 		.space	32
+ 580      00000000 
+ 580      00000000 
+ 580      00000000 
+ 580      00000000 
+ 583              	dwTransferSize:
+ 584 0020 00000000 		.space	4
+ 587              	CSW:
+ 588 0024 00000000 		.space	16
+ 588      00000000 
+ 588      00000000 
+ 588      00000000 
+ 591              	eState:
+ 592 0034 00       		.space	1
+ 593 0035 000000   		.space	3
+ 596              	pbData:
+ 597 0038 00000000 		.space	4
+ 600              	dwOffset:
+ 601 003c 00000000 		.space	4
+ 602              		.text
+ 603              	.Letext0:
+ 604              		.file 2 "../LPCUSB/type.h"
+DEFINED SYMBOLS
+                            *ABS*:00000000 msc_bot.c
+     /tmp/ccZMLBY5.s:16     .text:00000000 $a
+     /tmp/ccZMLBY5.s:18     .text:00000000 SendCSW
+     /tmp/ccZMLBY5.s:58     .text:00000038 $d
+     /tmp/ccZMLBY5.s:63     .text:00000040 $a
+     /tmp/ccZMLBY5.s:65     .text:00000040 BOTStall
+     /tmp/ccZMLBY5.s:110    .text:00000078 $d
+     /tmp/ccZMLBY5.s:114    .text:0000007c $a
+     /tmp/ccZMLBY5.s:116    .text:0000007c HandleDataIn
+     /tmp/ccZMLBY5.s:196    .text:0000011c $d
+     /tmp/ccZMLBY5.s:200    .text:00000120 $a
+     /tmp/ccZMLBY5.s:203    .text:00000120 MSCBotReset
+     /tmp/ccZMLBY5.s:227    .text:0000013c $d
+     /tmp/ccZMLBY5.s:231    .text:00000140 $a
+     /tmp/ccZMLBY5.s:234    .text:00000140 MSCBotBulkOut
+     /tmp/ccZMLBY5.s:263    .text:00000160 $d
+     /tmp/ccZMLBY5.s:270    .text:00000174 $a
+     /tmp/ccZMLBY5.s:503    .text:00000348 $d
+     /tmp/ccZMLBY5.s:508    .text:00000350 $a
+     /tmp/ccZMLBY5.s:511    .text:00000350 MSCBotBulkIn
+     /tmp/ccZMLBY5.s:570    .text:000003b0 $d
+     /tmp/ccZMLBY5.s:575    .bss:00000000 $d
+     /tmp/ccZMLBY5.s:579    .bss:00000000 CBW
+     /tmp/ccZMLBY5.s:583    .bss:00000020 dwTransferSize
+     /tmp/ccZMLBY5.s:587    .bss:00000024 CSW
+     /tmp/ccZMLBY5.s:591    .bss:00000034 eState
+     /tmp/ccZMLBY5.s:596    .bss:00000038 pbData
+     /tmp/ccZMLBY5.s:600    .bss:0000003c dwOffset
+                     .debug_frame:00000010 $d
+
+UNDEFINED SYMBOLS
+USBHwEPStall
+SCSIHandleData
+USBHwEPWrite
+SCSIReset
+USBHwEPRead
+SCSIHandleCmd

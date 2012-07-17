@@ -1,0 +1,1285 @@
+   1              		.cpu arm7tdmi-s
+   2              		.fpu softvfp
+   3              		.eabi_attribute 20, 1
+   4              		.eabi_attribute 21, 1
+   5              		.eabi_attribute 23, 3
+   6              		.eabi_attribute 24, 1
+   7              		.eabi_attribute 25, 1
+   8              		.eabi_attribute 26, 1
+   9              		.eabi_attribute 30, 4
+  10              		.eabi_attribute 34, 0
+  11              		.eabi_attribute 18, 4
+  12              		.file	"blockdev_sd.c"
+  13              		.text
+  14              	.Ltext0:
+  15              		.cfi_sections	.debug_frame
+  16              		.align	2
+  18              	Resp8b:
+  19              	.LFB1:
+  20              		.file 1 "../LPCUSB/blockdev_sd.c"
+   1:../LPCUSB/blockdev_sd.c **** /*****************************************************************************\
+   2:../LPCUSB/blockdev_sd.c **** *              efs - General purpose Embedded Filesystem library              *
+   3:../LPCUSB/blockdev_sd.c **** *          --------------------- -----------------------------------          *
+   4:../LPCUSB/blockdev_sd.c **** *                                                                             *
+   5:../LPCUSB/blockdev_sd.c **** * Filename : sd.c                                                             *
+   6:../LPCUSB/blockdev_sd.c **** * Revision : Initial developement                                             *
+   7:../LPCUSB/blockdev_sd.c **** * Description : This file contains the functions needed to use efs for        *
+   8:../LPCUSB/blockdev_sd.c **** *               accessing files on an SD-card.                                *
+   9:../LPCUSB/blockdev_sd.c **** *                                                                             *
+  10:../LPCUSB/blockdev_sd.c **** * This library is free software; you can redistribute it and/or               *
+  11:../LPCUSB/blockdev_sd.c **** * modify it under the terms of the GNU Lesser General Public                  *
+  12:../LPCUSB/blockdev_sd.c **** * License as published by the Free Software Foundation; either                *
+  13:../LPCUSB/blockdev_sd.c **** * version 2.1 of the License, or (at your option) any later version.          *
+  14:../LPCUSB/blockdev_sd.c **** *                                                                             *
+  15:../LPCUSB/blockdev_sd.c **** * This library is distributed in the hope that it will be useful,             *
+  16:../LPCUSB/blockdev_sd.c **** * but WITHOUT ANY WARRANTY; without even the implied warranty of              *
+  17:../LPCUSB/blockdev_sd.c **** * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU           *
+  18:../LPCUSB/blockdev_sd.c **** * Lesser General Public License for more details.                             *
+  19:../LPCUSB/blockdev_sd.c **** *                                                                             *
+  20:../LPCUSB/blockdev_sd.c **** *                                                    (c)2005 Michael De Nil   *
+  21:../LPCUSB/blockdev_sd.c **** *                                                    (c)2005 Lennart Yseboodt *
+  22:../LPCUSB/blockdev_sd.c **** \*****************************************************************************/
+  23:../LPCUSB/blockdev_sd.c **** 
+  24:../LPCUSB/blockdev_sd.c **** /*
+  25:../LPCUSB/blockdev_sd.c ****     2006, Bertrik Sikken, modified for LPCUSB
+  26:../LPCUSB/blockdev_sd.c **** */
+  27:../LPCUSB/blockdev_sd.c **** 
+  28:../LPCUSB/blockdev_sd.c **** #include "type.h"
+  29:../LPCUSB/blockdev_sd.c **** 
+  30:../LPCUSB/blockdev_sd.c **** #include <stdio.h>
+  31:../LPCUSB/blockdev_sd.c **** #include "rprintf.h"
+  32:../LPCUSB/blockdev_sd.c **** 
+  33:../LPCUSB/blockdev_sd.c **** #include "blockdev.h"
+  34:../LPCUSB/blockdev_sd.c **** #include "spi.h"
+  35:../LPCUSB/blockdev_sd.c **** 
+  36:../LPCUSB/blockdev_sd.c **** #define CMD_GOIDLESTATE     0
+  37:../LPCUSB/blockdev_sd.c **** #define CMD_SENDOPCOND      1
+  38:../LPCUSB/blockdev_sd.c **** #define CMD_READCSD         9
+  39:../LPCUSB/blockdev_sd.c **** #define CMD_READCID         10
+  40:../LPCUSB/blockdev_sd.c **** #define CMD_SENDSTATUS      13
+  41:../LPCUSB/blockdev_sd.c **** #define CMD_READSINGLEBLOCK 17
+  42:../LPCUSB/blockdev_sd.c **** #define CMD_WRITE           24
+  43:../LPCUSB/blockdev_sd.c **** #define CMD_WRITE_MULTIPLE  25
+  44:../LPCUSB/blockdev_sd.c **** 
+  45:../LPCUSB/blockdev_sd.c **** static void Command(U8 cmd, U32 param)
+  46:../LPCUSB/blockdev_sd.c **** {
+  47:../LPCUSB/blockdev_sd.c ****     U8  abCmd[8];
+  48:../LPCUSB/blockdev_sd.c **** 
+  49:../LPCUSB/blockdev_sd.c ****     // create buffer
+  50:../LPCUSB/blockdev_sd.c ****     abCmd[0] = 0xff;
+  51:../LPCUSB/blockdev_sd.c ****     abCmd[1] = 0x40 | cmd;
+  52:../LPCUSB/blockdev_sd.c ****     abCmd[2] = (U8)(param >> 24);
+  53:../LPCUSB/blockdev_sd.c ****     abCmd[3] = (U8)(param >> 16);
+  54:../LPCUSB/blockdev_sd.c ****     abCmd[4] = (U8)(param >> 8);
+  55:../LPCUSB/blockdev_sd.c ****     abCmd[5] = (U8)(param);
+  56:../LPCUSB/blockdev_sd.c ****     abCmd[6] = 0x95;            /* Checksum (should be only valid for first command (0) */
+  57:../LPCUSB/blockdev_sd.c ****     abCmd[7] = 0xff;            /* eat empty command - response */
+  58:../LPCUSB/blockdev_sd.c **** 
+  59:../LPCUSB/blockdev_sd.c ****     SPISendN(abCmd, 8);
+  60:../LPCUSB/blockdev_sd.c **** }
+  61:../LPCUSB/blockdev_sd.c **** 
+  62:../LPCUSB/blockdev_sd.c **** /*****************************************************************************/
+  63:../LPCUSB/blockdev_sd.c **** 
+  64:../LPCUSB/blockdev_sd.c **** static U8 Resp8b(void)
+  65:../LPCUSB/blockdev_sd.c **** {
+  21              		.loc 1 65 0
+  22              		.cfi_startproc
+  23              		@ Function supports interworking.
+  24              		@ args = 0, pretend = 0, frame = 0
+  25              		@ frame_needed = 0, uses_anonymous_args = 0
+  26              	.LVL0:
+  27 0000 10402DE9 		stmfd	sp!, {r4, lr}
+  28              	.LCFI0:
+  29              		.cfi_def_cfa_offset 8
+  30              		.cfi_offset 14, -4
+  31              		.cfi_offset 4, -8
+  32              		.loc 1 65 0
+  33 0004 0840A0E3 		mov	r4, #8
+  34              	.LVL1:
+  35              	.L3:
+  66:../LPCUSB/blockdev_sd.c ****     U8 i;
+  67:../LPCUSB/blockdev_sd.c ****     U8 resp;
+  68:../LPCUSB/blockdev_sd.c **** 
+  69:../LPCUSB/blockdev_sd.c ****     /* Respone will come after 1 - 8 pings */
+  70:../LPCUSB/blockdev_sd.c ****     for (i = 0; i < 8; i++)
+  71:../LPCUSB/blockdev_sd.c ****     {
+  72:../LPCUSB/blockdev_sd.c ****         resp = SPISend(0xff);
+  36              		.loc 1 72 0
+  37 0008 FF00A0E3 		mov	r0, #255
+  38 000c FEFFFFEB 		bl	SPISend
+  39              	.LVL2:
+  73:../LPCUSB/blockdev_sd.c ****         if (resp != 0xff)
+  40              		.loc 1 73 0
+  41 0010 FF0050E3 		cmp	r0, #255
+  42 0014 0200001A 		bne	.L2
+  43              	.LVL3:
+  44 0018 014044E2 		sub	r4, r4, #1
+  70:../LPCUSB/blockdev_sd.c ****     for (i = 0; i < 8; i++)
+  45              		.loc 1 70 0
+  46 001c FF4014E2 		ands	r4, r4, #255
+  47 0020 F8FFFF1A 		bne	.L3
+  48              	.LVL4:
+  49              	.L2:
+  74:../LPCUSB/blockdev_sd.c ****         {
+  75:../LPCUSB/blockdev_sd.c ****             return resp;
+  76:../LPCUSB/blockdev_sd.c ****         }
+  77:../LPCUSB/blockdev_sd.c ****     }
+  78:../LPCUSB/blockdev_sd.c **** 
+  79:../LPCUSB/blockdev_sd.c ****     return resp;
+  80:../LPCUSB/blockdev_sd.c **** }
+  50              		.loc 1 80 0
+  51 0024 1040BDE8 		ldmfd	sp!, {r4, lr}
+  52 0028 1EFF2FE1 		bx	lr
+  53              		.cfi_endproc
+  54              	.LFE1:
+  56              		.align	2
+  58              	Command:
+  59              	.LFB0:
+  46:../LPCUSB/blockdev_sd.c **** {
+  60              		.loc 1 46 0
+  61              		.cfi_startproc
+  62              		@ Function supports interworking.
+  63              		@ args = 0, pretend = 0, frame = 8
+  64              		@ frame_needed = 0, uses_anonymous_args = 0
+  65              	.LVL5:
+  66 002c 07402DE9 		stmfd	sp!, {r0, r1, r2, lr}
+  67              	.LCFI1:
+  68              		.cfi_def_cfa_offset 16
+  69              		.cfi_offset 14, -4
+  70              		.cfi_offset 2, -8
+  71              		.cfi_offset 1, -12
+  72              		.cfi_offset 0, -16
+  52:../LPCUSB/blockdev_sd.c ****     abCmd[2] = (U8)(param >> 24);
+  73              		.loc 1 52 0
+  74 0030 212CA0E1 		mov	r2, r1, lsr #24
+  75 0034 0220CDE5 		strb	r2, [sp, #2]
+  53:../LPCUSB/blockdev_sd.c ****     abCmd[3] = (U8)(param >> 16);
+  76              		.loc 1 53 0
+  77 0038 2128A0E1 		mov	r2, r1, lsr #16
+  51:../LPCUSB/blockdev_sd.c ****     abCmd[1] = 0x40 | cmd;
+  78              		.loc 1 51 0
+  79 003c 400080E3 		orr	r0, r0, #64
+  80              	.LVL6:
+  53:../LPCUSB/blockdev_sd.c ****     abCmd[3] = (U8)(param >> 16);
+  81              		.loc 1 53 0
+  82 0040 0320CDE5 		strb	r2, [sp, #3]
+  54:../LPCUSB/blockdev_sd.c ****     abCmd[4] = (U8)(param >> 8);
+  83              		.loc 1 54 0
+  84 0044 2124A0E1 		mov	r2, r1, lsr #8
+  50:../LPCUSB/blockdev_sd.c ****     abCmd[0] = 0xff;
+  85              		.loc 1 50 0
+  86 0048 0030E0E3 		mvn	r3, #0
+  51:../LPCUSB/blockdev_sd.c ****     abCmd[1] = 0x40 | cmd;
+  87              		.loc 1 51 0
+  88 004c 0100CDE5 		strb	r0, [sp, #1]
+  54:../LPCUSB/blockdev_sd.c ****     abCmd[4] = (U8)(param >> 8);
+  89              		.loc 1 54 0
+  90 0050 0420CDE5 		strb	r2, [sp, #4]
+  55:../LPCUSB/blockdev_sd.c ****     abCmd[5] = (U8)(param);
+  91              		.loc 1 55 0
+  92 0054 0510CDE5 		strb	r1, [sp, #5]
+  56:../LPCUSB/blockdev_sd.c ****     abCmd[6] = 0x95;            /* Checksum (should be only valid for first command (0) */
+  93              		.loc 1 56 0
+  94 0058 6A20E0E3 		mvn	r2, #106
+  59:../LPCUSB/blockdev_sd.c ****     SPISendN(abCmd, 8);
+  95              		.loc 1 59 0
+  96 005c 0D00A0E1 		mov	r0, sp
+  97 0060 0810A0E3 		mov	r1, #8
+  98              	.LVL7:
+  50:../LPCUSB/blockdev_sd.c ****     abCmd[0] = 0xff;
+  99              		.loc 1 50 0
+ 100 0064 0030CDE5 		strb	r3, [sp, #0]
+  56:../LPCUSB/blockdev_sd.c ****     abCmd[6] = 0x95;            /* Checksum (should be only valid for first command (0) */
+ 101              		.loc 1 56 0
+ 102 0068 0620CDE5 		strb	r2, [sp, #6]
+  57:../LPCUSB/blockdev_sd.c ****     abCmd[7] = 0xff;            /* eat empty command - response */
+ 103              		.loc 1 57 0
+ 104 006c 0730CDE5 		strb	r3, [sp, #7]
+  59:../LPCUSB/blockdev_sd.c ****     SPISendN(abCmd, 8);
+ 105              		.loc 1 59 0
+ 106 0070 FEFFFFEB 		bl	SPISendN
+  60:../LPCUSB/blockdev_sd.c **** }
+ 107              		.loc 1 60 0
+ 108 0074 0E40BDE8 		ldmfd	sp!, {r1, r2, r3, lr}
+ 109 0078 1EFF2FE1 		bx	lr
+ 110              		.cfi_endproc
+ 111              	.LFE0:
+ 113              		.align	2
+ 115              	Resp8bError:
+ 116              	.LFB2:
+  81:../LPCUSB/blockdev_sd.c **** 
+  82:../LPCUSB/blockdev_sd.c **** /*****************************************************************************/
+  83:../LPCUSB/blockdev_sd.c **** 
+  84:../LPCUSB/blockdev_sd.c **** static void Resp8bError(U8 value)
+  85:../LPCUSB/blockdev_sd.c **** {
+ 117              		.loc 1 85 0
+ 118              		.cfi_startproc
+ 119              		@ Function supports interworking.
+ 120              		@ args = 0, pretend = 0, frame = 0
+ 121              		@ frame_needed = 0, uses_anonymous_args = 0
+ 122              	.LVL8:
+  86:../LPCUSB/blockdev_sd.c ****     switch (value)
+ 123              		.loc 1 86 0
+ 124 007c 080050E3 		cmp	r0, #8
+  85:../LPCUSB/blockdev_sd.c **** {
+ 125              		.loc 1 85 0
+ 126 0080 08402DE9 		stmfd	sp!, {r3, lr}
+ 127              	.LCFI2:
+ 128              		.cfi_def_cfa_offset 8
+ 129              		.cfi_offset 14, -4
+ 130              		.cfi_offset 3, -8
+  85:../LPCUSB/blockdev_sd.c **** {
+ 131              		.loc 1 85 0
+ 132 0084 0010A0E1 		mov	r1, r0
+ 133              		.loc 1 86 0
+ 134 0088 1400000A 		beq	.L11
+ 135 008c 0600008A 		bhi	.L15
+ 136 0090 020050E3 		cmp	r0, #2
+ 137 0094 1500000A 		beq	.L9
+ 138 0098 040050E3 		cmp	r0, #4
+ 139 009c 1100000A 		beq	.L10
+ 140 00a0 010050E3 		cmp	r0, #1
+ 141 00a4 1600001A 		bne	.L7
+ 142 00a8 120000EA 		b	.L18
+ 143              	.L15:
+ 144 00ac 200050E3 		cmp	r0, #32
+ 145 00b0 0600000A 		beq	.L13
+ 146 00b4 400050E3 		cmp	r0, #64
+ 147 00b8 0200000A 		beq	.L14
+ 148 00bc 100050E3 		cmp	r0, #16
+ 149 00c0 0F00001A 		bne	.L7
+ 150 00c4 030000EA 		b	.L19
+ 151              	.L14:
+  87:../LPCUSB/blockdev_sd.c ****     {
+  88:../LPCUSB/blockdev_sd.c ****         case 0x40:  rprintf("Argument out of bounds.\n");               break;
+ 152              		.loc 1 88 0
+ 153 00c8 44009FE5 		ldr	r0, .L20
+ 154              	.LVL9:
+ 155 00cc 0A0000EA 		b	.L17
+ 156              	.LVL10:
+ 157              	.L13:
+  89:../LPCUSB/blockdev_sd.c ****         case 0x20:  rprintf("Address out of bounds.\n");                break;
+ 158              		.loc 1 89 0
+ 159 00d0 40009FE5 		ldr	r0, .L20+4
+ 160              	.LVL11:
+ 161 00d4 080000EA 		b	.L17
+ 162              	.LVL12:
+ 163              	.L19:
+  90:../LPCUSB/blockdev_sd.c ****         case 0x10:  rprintf("Error during erase sequence.\n");          break;
+ 164              		.loc 1 90 0
+ 165 00d8 3C009FE5 		ldr	r0, .L20+8
+ 166              	.LVL13:
+ 167 00dc 060000EA 		b	.L17
+ 168              	.LVL14:
+ 169              	.L11:
+  91:../LPCUSB/blockdev_sd.c ****         case 0x08:  rprintf("CRC failed.\n");                           break;
+ 170              		.loc 1 91 0
+ 171 00e0 38009FE5 		ldr	r0, .L20+12
+ 172              	.LVL15:
+ 173 00e4 040000EA 		b	.L17
+ 174              	.LVL16:
+ 175              	.L10:
+  92:../LPCUSB/blockdev_sd.c ****         case 0x04:  rprintf("Illegal command.\n");                      break;
+ 176              		.loc 1 92 0
+ 177 00e8 34009FE5 		ldr	r0, .L20+16
+ 178              	.LVL17:
+ 179 00ec 020000EA 		b	.L17
+ 180              	.LVL18:
+ 181              	.L9:
+  93:../LPCUSB/blockdev_sd.c ****         case 0x02:  rprintf("Erase reset (see SanDisk docs p5-13).\n"); break;
+ 182              		.loc 1 93 0
+ 183 00f0 30009FE5 		ldr	r0, .L20+20
+ 184              	.LVL19:
+ 185 00f4 000000EA 		b	.L17
+ 186              	.LVL20:
+ 187              	.L18:
+  94:../LPCUSB/blockdev_sd.c **** //        case 0x01:  rprintf("Card is initialising.\n");                 break;
+  95:../LPCUSB/blockdev_sd.c ****         case 0x01:  rprintf(".");                 break;
+ 188              		.loc 1 95 0
+ 189 00f8 2C009FE5 		ldr	r0, .L20+24
+ 190              	.LVL21:
+ 191              	.L17:
+ 192 00fc FEFFFFEB 		bl	rprintf
+ 193 0100 010000EA 		b	.L6
+ 194              	.LVL22:
+ 195              	.L7:
+  96:../LPCUSB/blockdev_sd.c ****             default:
+  97:../LPCUSB/blockdev_sd.c ****             rprintf("Unknown error 0x%x (see SanDisk docs p5-13).\n", value);
+ 196              		.loc 1 97 0
+ 197 0104 24009FE5 		ldr	r0, .L20+28
+ 198              	.LVL23:
+ 199 0108 FEFFFFEB 		bl	rprintf
+ 200              	.L6:
+  98:../LPCUSB/blockdev_sd.c ****             break;
+  99:../LPCUSB/blockdev_sd.c ****     }
+ 100:../LPCUSB/blockdev_sd.c **** }
+ 201              		.loc 1 100 0
+ 202 010c 0840BDE8 		ldmfd	sp!, {r3, lr}
+ 203 0110 1EFF2FE1 		bx	lr
+ 204              	.L21:
+ 205              		.align	2
+ 206              	.L20:
+ 207 0114 00000000 		.word	.LC0
+ 208 0118 19000000 		.word	.LC1
+ 209 011c 31000000 		.word	.LC2
+ 210 0120 4F000000 		.word	.LC3
+ 211 0124 5C000000 		.word	.LC4
+ 212 0128 6E000000 		.word	.LC5
+ 213 012c 95000000 		.word	.LC6
+ 214 0130 97000000 		.word	.LC7
+ 215              		.cfi_endproc
+ 216              	.LFE2:
+ 218              		.align	2
+ 219              		.global	BlockDevGetSize
+ 221              	BlockDevGetSize:
+ 222              	.LFB3:
+ 101:../LPCUSB/blockdev_sd.c **** 
+ 102:../LPCUSB/blockdev_sd.c **** 
+ 103:../LPCUSB/blockdev_sd.c **** /* ****************************************************************************
+ 104:../LPCUSB/blockdev_sd.c ****  calculates size of card from CSD
+ 105:../LPCUSB/blockdev_sd.c ****  (extension by Martin Thomas, inspired by code from Holger Klabunde)
+ 106:../LPCUSB/blockdev_sd.c ****  */
+ 107:../LPCUSB/blockdev_sd.c **** int BlockDevGetSize(U32 *pdwDriveSize)
+ 108:../LPCUSB/blockdev_sd.c **** {
+ 223              		.loc 1 108 0
+ 224              		.cfi_startproc
+ 225              		@ Function supports interworking.
+ 226              		@ args = 0, pretend = 0, frame = 16
+ 227              		@ frame_needed = 0, uses_anonymous_args = 0
+ 228              	.LVL24:
+ 229 0134 30402DE9 		stmfd	sp!, {r4, r5, lr}
+ 230              	.LCFI3:
+ 231              		.cfi_def_cfa_offset 12
+ 232              		.cfi_offset 14, -4
+ 233              		.cfi_offset 5, -8
+ 234              		.cfi_offset 4, -12
+ 109:../LPCUSB/blockdev_sd.c ****     U8 cardresp, i, by;
+ 110:../LPCUSB/blockdev_sd.c ****     U8 iob[16];
+ 111:../LPCUSB/blockdev_sd.c ****     U16 c_size, c_size_mult, read_bl_len;
+ 112:../LPCUSB/blockdev_sd.c **** 
+ 113:../LPCUSB/blockdev_sd.c ****     Command(CMD_READCSD, 0);
+ 235              		.loc 1 113 0
+ 236 0138 0010A0E3 		mov	r1, #0
+ 108:../LPCUSB/blockdev_sd.c **** {
+ 237              		.loc 1 108 0
+ 238 013c 0050A0E1 		mov	r5, r0
+ 239 0140 14D04DE2 		sub	sp, sp, #20
+ 240              	.LCFI4:
+ 241              		.cfi_def_cfa_offset 32
+ 242              		.loc 1 113 0
+ 243 0144 0900A0E3 		mov	r0, #9
+ 244              	.LVL25:
+ 245 0148 B7FFFFEB 		bl	Command
+ 246              	.L23:
+ 114:../LPCUSB/blockdev_sd.c ****     do
+ 115:../LPCUSB/blockdev_sd.c ****     {
+ 116:../LPCUSB/blockdev_sd.c ****         cardresp = Resp8b();
+ 247              		.loc 1 116 0 discriminator 1
+ 248 014c ABFFFFEB 		bl	Resp8b
+ 249              	.LVL26:
+ 117:../LPCUSB/blockdev_sd.c ****     }
+ 118:../LPCUSB/blockdev_sd.c ****     while (cardresp != 0xFE);
+ 250              		.loc 1 118 0 discriminator 1
+ 251 0150 FE0050E3 		cmp	r0, #254
+ 252 0154 FCFFFF1A 		bne	.L23
+ 119:../LPCUSB/blockdev_sd.c **** 
+ 120:../LPCUSB/blockdev_sd.c ****     rprintf("CSD:");
+ 253              		.loc 1 120 0
+ 254 0158 B8009FE5 		ldr	r0, .L27
+ 255              	.LVL27:
+ 256 015c FEFFFFEB 		bl	rprintf
+ 257              	.LVL28:
+ 258 0160 0040A0E3 		mov	r4, #0
+ 259              	.LVL29:
+ 260              	.L24:
+ 121:../LPCUSB/blockdev_sd.c ****     for (i = 0; i < 16; i++)
+ 122:../LPCUSB/blockdev_sd.c ****     {
+ 123:../LPCUSB/blockdev_sd.c ****         iob[i] = SPISend(0xFF);
+ 261              		.loc 1 123 0 discriminator 2
+ 262 0164 FF00A0E3 		mov	r0, #255
+ 263 0168 FEFFFFEB 		bl	SPISend
+ 264 016c 0400CDE7 		strb	r0, [sp, r4]
+ 265 0170 0010A0E1 		mov	r1, r0
+ 124:../LPCUSB/blockdev_sd.c ****         rprintf(" %02x", iob[i]);
+ 266              		.loc 1 124 0 discriminator 2
+ 267 0174 014084E2 		add	r4, r4, #1
+ 268 0178 9C009FE5 		ldr	r0, .L27+4
+ 269 017c FEFFFFEB 		bl	rprintf
+ 121:../LPCUSB/blockdev_sd.c ****     for (i = 0; i < 16; i++)
+ 270              		.loc 1 121 0 discriminator 2
+ 271 0180 100054E3 		cmp	r4, #16
+ 272 0184 F6FFFF1A 		bne	.L24
+ 125:../LPCUSB/blockdev_sd.c ****     }
+ 126:../LPCUSB/blockdev_sd.c ****     rprintf("\n");
+ 273              		.loc 1 126 0
+ 274 0188 90009FE5 		ldr	r0, .L27+8
+ 275 018c FEFFFFEB 		bl	rprintf
+ 127:../LPCUSB/blockdev_sd.c **** 
+ 128:../LPCUSB/blockdev_sd.c ****     SPISend(0xff);
+ 276              		.loc 1 128 0
+ 277 0190 FF00A0E3 		mov	r0, #255
+ 278 0194 FEFFFFEB 		bl	SPISend
+ 129:../LPCUSB/blockdev_sd.c ****     SPISend(0xff);
+ 279              		.loc 1 129 0
+ 280 0198 FF00A0E3 		mov	r0, #255
+ 281 019c FEFFFFEB 		bl	SPISend
+ 130:../LPCUSB/blockdev_sd.c **** 
+ 131:../LPCUSB/blockdev_sd.c ****     c_size = iob[6] & 0x03;     // bits 1..0
+ 132:../LPCUSB/blockdev_sd.c ****     c_size <<= 10;
+ 133:../LPCUSB/blockdev_sd.c ****     c_size += (U16) iob[7] << 2;
+ 282              		.loc 1 133 0
+ 283 01a0 0720DDE5 		ldrb	r2, [sp, #7]	@ zero_extendqisi2
+ 134:../LPCUSB/blockdev_sd.c ****     c_size += iob[8] >> 6;
+ 284              		.loc 1 134 0
+ 285 01a4 0830DDE5 		ldrb	r3, [sp, #8]	@ zero_extendqisi2
+ 131:../LPCUSB/blockdev_sd.c ****     c_size = iob[6] & 0x03;     // bits 1..0
+ 286              		.loc 1 131 0
+ 287 01a8 0610DDE5 		ldrb	r1, [sp, #6]	@ zero_extendqisi2
+ 133:../LPCUSB/blockdev_sd.c ****     c_size += (U16) iob[7] << 2;
+ 288              		.loc 1 133 0
+ 289 01ac 0221A0E1 		mov	r2, r2, asl #2
+ 290 01b0 232382E0 		add	r2, r2, r3, lsr #6
+ 131:../LPCUSB/blockdev_sd.c ****     c_size = iob[6] & 0x03;     // bits 1..0
+ 291              		.loc 1 131 0
+ 292 01b4 031001E2 		and	r1, r1, #3
+ 293              	.LVL30:
+ 135:../LPCUSB/blockdev_sd.c **** 
+ 136:../LPCUSB/blockdev_sd.c ****     by = iob[5] & 0x0F;
+ 137:../LPCUSB/blockdev_sd.c ****     read_bl_len = 1 << by;
+ 138:../LPCUSB/blockdev_sd.c **** 
+ 139:../LPCUSB/blockdev_sd.c ****     by = iob[9] & 0x03;
+ 140:../LPCUSB/blockdev_sd.c ****     by <<= 1;
+ 141:../LPCUSB/blockdev_sd.c ****     by += iob[10] >> 7;
+ 142:../LPCUSB/blockdev_sd.c **** 
+ 143:../LPCUSB/blockdev_sd.c ****     c_size_mult = 1 << (2 + by);
+ 144:../LPCUSB/blockdev_sd.c **** 
+ 145:../LPCUSB/blockdev_sd.c ****     *pdwDriveSize = (U32) (c_size + 1) * (U32) c_size_mult *(U32) read_bl_len;
+ 294              		.loc 1 145 0
+ 295 01b8 011582E0 		add	r1, r2, r1, asl #10
+ 296              	.LVL31:
+ 136:../LPCUSB/blockdev_sd.c ****     by = iob[5] & 0x0F;
+ 297              		.loc 1 136 0
+ 298 01bc 0520DDE5 		ldrb	r2, [sp, #5]	@ zero_extendqisi2
+ 137:../LPCUSB/blockdev_sd.c ****     read_bl_len = 1 << by;
+ 299              		.loc 1 137 0
+ 300 01c0 0130A0E3 		mov	r3, #1
+ 136:../LPCUSB/blockdev_sd.c ****     by = iob[5] & 0x0F;
+ 301              		.loc 1 136 0
+ 302 01c4 0F2002E2 		and	r2, r2, #15
+ 137:../LPCUSB/blockdev_sd.c ****     read_bl_len = 1 << by;
+ 303              		.loc 1 137 0
+ 304 01c8 1322A0E1 		mov	r2, r3, asl r2
+ 305              		.loc 1 145 0
+ 306 01cc 0228A0E1 		mov	r2, r2, asl #16
+ 307 01d0 011081E2 		add	r1, r1, #1
+ 308 01d4 2228A0E1 		mov	r2, r2, lsr #16
+ 309 01d8 910202E0 		mul	r2, r1, r2
+ 139:../LPCUSB/blockdev_sd.c ****     by = iob[9] & 0x03;
+ 310              		.loc 1 139 0
+ 311 01dc 0900DDE5 		ldrb	r0, [sp, #9]	@ zero_extendqisi2
+ 141:../LPCUSB/blockdev_sd.c ****     by += iob[10] >> 7;
+ 312              		.loc 1 141 0
+ 313 01e0 0A10DDE5 		ldrb	r1, [sp, #10]	@ zero_extendqisi2
+ 139:../LPCUSB/blockdev_sd.c ****     by = iob[9] & 0x03;
+ 314              		.loc 1 139 0
+ 315 01e4 030000E2 		and	r0, r0, #3
+ 316              	.LVL32:
+ 141:../LPCUSB/blockdev_sd.c ****     by += iob[10] >> 7;
+ 317              		.loc 1 141 0
+ 318 01e8 A113A0E1 		mov	r1, r1, lsr #7
+ 143:../LPCUSB/blockdev_sd.c ****     c_size_mult = 1 << (2 + by);
+ 319              		.loc 1 143 0
+ 320 01ec 801081E0 		add	r1, r1, r0, asl #1
+ 321 01f0 021081E2 		add	r1, r1, #2
+ 322 01f4 1331A0E1 		mov	r3, r3, asl r1
+ 323              		.loc 1 145 0
+ 324 01f8 0338A0E1 		mov	r3, r3, asl #16
+ 325 01fc 2338A0E1 		mov	r3, r3, lsr #16
+ 326 0200 920303E0 		mul	r3, r2, r3
+ 146:../LPCUSB/blockdev_sd.c **** 
+ 147:../LPCUSB/blockdev_sd.c ****     return 0;
+ 148:../LPCUSB/blockdev_sd.c **** }
+ 327              		.loc 1 148 0
+ 328 0204 0000A0E3 		mov	r0, #0
+ 329              	.LVL33:
+ 145:../LPCUSB/blockdev_sd.c ****     *pdwDriveSize = (U32) (c_size + 1) * (U32) c_size_mult *(U32) read_bl_len;
+ 330              		.loc 1 145 0
+ 331 0208 003085E5 		str	r3, [r5, #0]
+ 332              		.loc 1 148 0
+ 333 020c 14D08DE2 		add	sp, sp, #20
+ 334 0210 3040BDE8 		ldmfd	sp!, {r4, r5, lr}
+ 335 0214 1EFF2FE1 		bx	lr
+ 336              	.L28:
+ 337              		.align	2
+ 338              	.L27:
+ 339 0218 C5000000 		.word	.LC8
+ 340 021c CA000000 		.word	.LC9
+ 341 0220 D0000000 		.word	.LC10
+ 342              		.cfi_endproc
+ 343              	.LFE3:
+ 345              		.align	2
+ 346              		.global	BlockDevInit
+ 348              	BlockDevInit:
+ 349              	.LFB6:
+ 149:../LPCUSB/blockdev_sd.c **** 
+ 150:../LPCUSB/blockdev_sd.c **** /*****************************************************************************/
+ 151:../LPCUSB/blockdev_sd.c **** 
+ 152:../LPCUSB/blockdev_sd.c **** static U16 Resp16b(void)
+ 153:../LPCUSB/blockdev_sd.c **** {
+ 154:../LPCUSB/blockdev_sd.c ****     U16 resp;
+ 155:../LPCUSB/blockdev_sd.c **** 
+ 156:../LPCUSB/blockdev_sd.c ****     resp = (Resp8b() << 8) & 0xff00;
+ 157:../LPCUSB/blockdev_sd.c ****     resp |= SPISend(0xff);
+ 158:../LPCUSB/blockdev_sd.c **** 
+ 159:../LPCUSB/blockdev_sd.c ****     return resp;
+ 160:../LPCUSB/blockdev_sd.c **** }
+ 161:../LPCUSB/blockdev_sd.c **** 
+ 162:../LPCUSB/blockdev_sd.c **** /*****************************************************************************/
+ 163:../LPCUSB/blockdev_sd.c **** 
+ 164:../LPCUSB/blockdev_sd.c **** static int State(void)
+ 165:../LPCUSB/blockdev_sd.c **** {
+ 166:../LPCUSB/blockdev_sd.c ****     U16 value;
+ 167:../LPCUSB/blockdev_sd.c **** 
+ 168:../LPCUSB/blockdev_sd.c ****     Command(CMD_SENDSTATUS, 0);
+ 169:../LPCUSB/blockdev_sd.c ****     value = Resp16b();
+ 170:../LPCUSB/blockdev_sd.c **** 
+ 171:../LPCUSB/blockdev_sd.c ****     switch (value)
+ 172:../LPCUSB/blockdev_sd.c ****     {
+ 173:../LPCUSB/blockdev_sd.c ****         case 0x0000: return 1;
+ 174:../LPCUSB/blockdev_sd.c ****         case 0x0001: rprintf("Card is Locked.\n");                                                 
+ 175:../LPCUSB/blockdev_sd.c ****         case 0x0002: rprintf("WP Erase Skip, Lock/Unlock Cmd Failed.\n");                          
+ 176:../LPCUSB/blockdev_sd.c ****         case 0x0004: rprintf("General / Unknown error -- card broken?.\n");                        
+ 177:../LPCUSB/blockdev_sd.c ****         case 0x0008: rprintf("Internal card controller error.\n");                                 
+ 178:../LPCUSB/blockdev_sd.c ****         case 0x0010: rprintf("Card internal ECC was applied, but failed to correct the data.\n");  
+ 179:../LPCUSB/blockdev_sd.c ****         case 0x0020: rprintf("Write protect violation.\n");                                        
+ 180:../LPCUSB/blockdev_sd.c ****         case 0x0040: rprintf("An invalid selection, sectors for erase.\n");                        
+ 181:../LPCUSB/blockdev_sd.c ****         case 0x0080: rprintf("Out of Range, CSD_Overwrite.\n");                                    
+ 182:../LPCUSB/blockdev_sd.c ****             default:
+ 183:../LPCUSB/blockdev_sd.c ****             if (value > 0x00FF)
+ 184:../LPCUSB/blockdev_sd.c ****             {
+ 185:../LPCUSB/blockdev_sd.c ****                 Resp8bError((U8) (value >> 8));
+ 186:../LPCUSB/blockdev_sd.c ****             }
+ 187:../LPCUSB/blockdev_sd.c ****             else
+ 188:../LPCUSB/blockdev_sd.c ****             {
+ 189:../LPCUSB/blockdev_sd.c ****                 rprintf("Unknown error: 0x%x (see SanDisk docs p5-14).\n", value);
+ 190:../LPCUSB/blockdev_sd.c ****             }
+ 191:../LPCUSB/blockdev_sd.c ****             break;
+ 192:../LPCUSB/blockdev_sd.c ****     }
+ 193:../LPCUSB/blockdev_sd.c ****     return -1;
+ 194:../LPCUSB/blockdev_sd.c **** }
+ 195:../LPCUSB/blockdev_sd.c **** 
+ 196:../LPCUSB/blockdev_sd.c **** /*****************************************************************************/
+ 197:../LPCUSB/blockdev_sd.c **** 
+ 198:../LPCUSB/blockdev_sd.c **** 
+ 199:../LPCUSB/blockdev_sd.c **** int BlockDevInit(void)
+ 200:../LPCUSB/blockdev_sd.c **** {
+ 350              		.loc 1 200 0
+ 351              		.cfi_startproc
+ 352              		@ Function supports interworking.
+ 353              		@ args = 0, pretend = 0, frame = 0
+ 354              		@ frame_needed = 0, uses_anonymous_args = 0
+ 355 0224 38402DE9 		stmfd	sp!, {r3, r4, r5, lr}
+ 356              	.LCFI5:
+ 357              		.cfi_def_cfa_offset 16
+ 358              		.cfi_offset 14, -4
+ 359              		.cfi_offset 5, -8
+ 360              		.cfi_offset 4, -12
+ 361              		.cfi_offset 3, -16
+ 201:../LPCUSB/blockdev_sd.c ****     int i;
+ 202:../LPCUSB/blockdev_sd.c ****     U8 resp;
+ 203:../LPCUSB/blockdev_sd.c **** 
+ 204:../LPCUSB/blockdev_sd.c ****     SPIInit();              /* init at low speed */
+ 362              		.loc 1 204 0
+ 363 0228 FEFFFFEB 		bl	SPIInit
+ 364              	.LVL34:
+ 365 022c 6540A0E3 		mov	r4, #101
+ 366              	.LVL35:
+ 367              	.L31:
+ 205:../LPCUSB/blockdev_sd.c **** 
+ 206:../LPCUSB/blockdev_sd.c ****     /* Try to send reset command up to 100 times */
+ 207:../LPCUSB/blockdev_sd.c ****     i = 100;
+ 208:../LPCUSB/blockdev_sd.c ****     do
+ 209:../LPCUSB/blockdev_sd.c ****     {
+ 210:../LPCUSB/blockdev_sd.c ****         Command(CMD_GOIDLESTATE, 0);
+ 368              		.loc 1 210 0 discriminator 1
+ 369 0230 0000A0E3 		mov	r0, #0
+ 370 0234 0010A0E1 		mov	r1, r0
+ 371 0238 7BFFFFEB 		bl	Command
+ 211:../LPCUSB/blockdev_sd.c ****         resp = Resp8b();
+ 372              		.loc 1 211 0 discriminator 1
+ 373 023c 6FFFFFEB 		bl	Resp8b
+ 374              	.LVL36:
+ 212:../LPCUSB/blockdev_sd.c ****     }
+ 213:../LPCUSB/blockdev_sd.c ****     while (resp != 1 && i--);
+ 375              		.loc 1 213 0 discriminator 1
+ 376 0240 010050E3 		cmp	r0, #1
+ 377 0244 0900000A 		beq	.L52
+ 378 0248 014054E2 		subs	r4, r4, #1
+ 379 024c F7FFFF1A 		bne	.L31
+ 380 0250 570000EA 		b	.L59
+ 381              	.L63:
+ 214:../LPCUSB/blockdev_sd.c **** 
+ 215:../LPCUSB/blockdev_sd.c ****     if (resp != 1)
+ 216:../LPCUSB/blockdev_sd.c ****     {
+ 217:../LPCUSB/blockdev_sd.c ****         if (resp == 0xff)
+ 218:../LPCUSB/blockdev_sd.c ****         {
+ 219:../LPCUSB/blockdev_sd.c ****             rprintf("resp=0xff\n");
+ 382              		.loc 1 219 0
+ 383 0254 74019FE5 		ldr	r0, .L64
+ 384              	.LVL37:
+ 385 0258 FEFFFFEB 		bl	rprintf
+ 220:../LPCUSB/blockdev_sd.c ****             return -1;
+ 386              		.loc 1 220 0
+ 387 025c 0000E0E3 		mvn	r0, #0
+ 388 0260 510000EA 		b	.L33
+ 389              	.LVL38:
+ 390              	.L56:
+ 221:../LPCUSB/blockdev_sd.c ****         }
+ 222:../LPCUSB/blockdev_sd.c ****         else
+ 223:../LPCUSB/blockdev_sd.c ****         {
+ 224:../LPCUSB/blockdev_sd.c ****             Resp8bError(resp);
+ 391              		.loc 1 224 0
+ 392 0264 84FFFFEB 		bl	Resp8bError
+ 393              	.LVL39:
+ 225:../LPCUSB/blockdev_sd.c ****             rprintf("resp!=0xff\n");
+ 394              		.loc 1 225 0
+ 395 0268 64019FE5 		ldr	r0, .L64+4
+ 396 026c 540000EA 		b	.L57
+ 397              	.LVL40:
+ 398              	.L52:
+ 213:../LPCUSB/blockdev_sd.c ****     while (resp != 1 && i--);
+ 399              		.loc 1 213 0
+ 400 0270 60519FE5 		ldr	r5, .L64+8
+ 401              	.LVL41:
+ 402              	.L30:
+ 226:../LPCUSB/blockdev_sd.c ****             return -2;
+ 227:../LPCUSB/blockdev_sd.c ****         }
+ 228:../LPCUSB/blockdev_sd.c ****     }
+ 229:../LPCUSB/blockdev_sd.c **** 
+ 230:../LPCUSB/blockdev_sd.c ****     /* Wait till card is ready initialising (returns 0 on CMD_1) */
+ 231:../LPCUSB/blockdev_sd.c ****     /* Try up to 32000 times. */
+ 232:../LPCUSB/blockdev_sd.c ****     i = 32000;
+ 233:../LPCUSB/blockdev_sd.c ****     do
+ 234:../LPCUSB/blockdev_sd.c ****     {
+ 235:../LPCUSB/blockdev_sd.c ****         Command(CMD_SENDOPCOND, 0);
+ 403              		.loc 1 235 0
+ 404 0274 0100A0E3 		mov	r0, #1
+ 405 0278 0010A0E3 		mov	r1, #0
+ 406 027c 6AFFFFEB 		bl	Command
+ 236:../LPCUSB/blockdev_sd.c **** 
+ 237:../LPCUSB/blockdev_sd.c ****         resp = Resp8b();
+ 407              		.loc 1 237 0
+ 408 0280 5EFFFFEB 		bl	Resp8b
+ 409              	.LVL42:
+ 238:../LPCUSB/blockdev_sd.c ****         if (resp != 0)
+ 410              		.loc 1 238 0
+ 411 0284 004050E2 		subs	r4, r0, #0
+ 412 0288 0500000A 		beq	.L34
+ 239:../LPCUSB/blockdev_sd.c ****         {
+ 240:../LPCUSB/blockdev_sd.c ****             Resp8bError(resp);
+ 413              		.loc 1 240 0
+ 414 028c 7AFFFFEB 		bl	Resp8bError
+ 415              	.LVL43:
+ 241:../LPCUSB/blockdev_sd.c ****         }
+ 242:../LPCUSB/blockdev_sd.c ****     }
+ 243:../LPCUSB/blockdev_sd.c ****     while (resp == 1 && i--);
+ 416              		.loc 1 243 0
+ 417 0290 010054E3 		cmp	r4, #1
+ 418 0294 2400001A 		bne	.L35
+ 419              		.loc 1 243 0 is_stmt 0 discriminator 1
+ 420 0298 015055E2 		subs	r5, r5, #1
+ 421 029c F4FFFF1A 		bne	.L30
+ 422 02a0 210000EA 		b	.L35
+ 423              	.LVL44:
+ 424              	.L34:
+ 244:../LPCUSB/blockdev_sd.c **** 
+ 245:../LPCUSB/blockdev_sd.c ****     if (resp != 0)
+ 246:../LPCUSB/blockdev_sd.c ****     {
+ 247:../LPCUSB/blockdev_sd.c ****         Resp8bError(resp);
+ 248:../LPCUSB/blockdev_sd.c ****         return -3;
+ 249:../LPCUSB/blockdev_sd.c ****     }
+ 250:../LPCUSB/blockdev_sd.c **** 
+ 251:../LPCUSB/blockdev_sd.c ****     /* increase speed after init */
+ 252:../LPCUSB/blockdev_sd.c ****     SPISetSpeed(SPI_PRESCALE_MIN);
+ 425              		.loc 1 252 0 is_stmt 1
+ 426 02a4 0800A0E3 		mov	r0, #8
+ 427              	.LVL45:
+ 428 02a8 FEFFFFEB 		bl	SPISetSpeed
+ 429              	.LBB8:
+ 430              	.LBB9:
+ 168:../LPCUSB/blockdev_sd.c ****     Command(CMD_SENDSTATUS, 0);
+ 431              		.loc 1 168 0
+ 432 02ac 0410A0E1 		mov	r1, r4
+ 433 02b0 0D00A0E3 		mov	r0, #13
+ 434 02b4 5CFFFFEB 		bl	Command
+ 435              	.LBB10:
+ 436              	.LBB11:
+ 156:../LPCUSB/blockdev_sd.c ****     resp = (Resp8b() << 8) & 0xff00;
+ 437              		.loc 1 156 0
+ 438 02b8 50FFFFEB 		bl	Resp8b
+ 439 02bc 0050A0E1 		mov	r5, r0
+ 440              	.LVL46:
+ 157:../LPCUSB/blockdev_sd.c ****     resp |= SPISend(0xff);
+ 441              		.loc 1 157 0
+ 442 02c0 FF00A0E3 		mov	r0, #255
+ 443              	.LVL47:
+ 444 02c4 FEFFFFEB 		bl	SPISend
+ 445 02c8 051480E1 		orr	r1, r0, r5, asl #8
+ 446 02cc 0118A0E1 		mov	r1, r1, asl #16
+ 447 02d0 2118A0E1 		mov	r1, r1, lsr #16
+ 448              	.LVL48:
+ 449              	.LBE11:
+ 450              	.LBE10:
+ 171:../LPCUSB/blockdev_sd.c ****     switch (value)
+ 451              		.loc 1 171 0
+ 452 02d4 080051E3 		cmp	r1, #8
+ 453 02d8 1D00000A 		beq	.L41
+ 454 02dc 0700008A 		bhi	.L46
+ 455 02e0 010051E3 		cmp	r1, #1
+ 456 02e4 1400000A 		beq	.L38
+ 457 02e8 2C00003A 		bcc	.L37
+ 458 02ec 020051E3 		cmp	r1, #2
+ 459 02f0 1300000A 		beq	.L39
+ 460 02f4 040051E3 		cmp	r1, #4
+ 461 02f8 2000001A 		bne	.L36
+ 462 02fc 120000EA 		b	.L60
+ 463              	.L46:
+ 464 0300 200051E3 		cmp	r1, #32
+ 465 0304 1600000A 		beq	.L43
+ 466 0308 0200008A 		bhi	.L47
+ 467 030c 100051E3 		cmp	r1, #16
+ 468 0310 1A00001A 		bne	.L36
+ 469 0314 100000EA 		b	.L61
+ 470              	.L47:
+ 471 0318 400051E3 		cmp	r1, #64
+ 472 031c 1200000A 		beq	.L44
+ 473 0320 800051E3 		cmp	r1, #128
+ 474 0324 1500001A 		bne	.L36
+ 475 0328 110000EA 		b	.L62
+ 476              	.LVL49:
+ 477              	.L35:
+ 478              	.LBE9:
+ 479              	.LBE8:
+ 247:../LPCUSB/blockdev_sd.c ****         Resp8bError(resp);
+ 480              		.loc 1 247 0
+ 481 032c 0400A0E1 		mov	r0, r4
+ 482 0330 51FFFFEB 		bl	Resp8bError
+ 248:../LPCUSB/blockdev_sd.c ****         return -3;
+ 483              		.loc 1 248 0
+ 484 0334 0200E0E3 		mvn	r0, #2
+ 485 0338 1B0000EA 		b	.L33
+ 486              	.LVL50:
+ 487              	.L38:
+ 488              	.LBB13:
+ 489              	.LBB12:
+ 174:../LPCUSB/blockdev_sd.c ****         case 0x0001: rprintf("Card is Locked.\n");                                                 
+ 490              		.loc 1 174 0
+ 491 033c 98009FE5 		ldr	r0, .L64+12
+ 492 0340 0C0000EA 		b	.L58
+ 493              	.L39:
+ 175:../LPCUSB/blockdev_sd.c ****         case 0x0002: rprintf("WP Erase Skip, Lock/Unlock Cmd Failed.\n");                          
+ 494              		.loc 1 175 0
+ 495 0344 94009FE5 		ldr	r0, .L64+16
+ 496 0348 0A0000EA 		b	.L58
+ 497              	.L60:
+ 176:../LPCUSB/blockdev_sd.c ****         case 0x0004: rprintf("General / Unknown error -- card broken?.\n");                        
+ 498              		.loc 1 176 0
+ 499 034c 90009FE5 		ldr	r0, .L64+20
+ 500 0350 080000EA 		b	.L58
+ 501              	.L41:
+ 177:../LPCUSB/blockdev_sd.c ****         case 0x0008: rprintf("Internal card controller error.\n");                                 
+ 502              		.loc 1 177 0
+ 503 0354 8C009FE5 		ldr	r0, .L64+24
+ 504 0358 060000EA 		b	.L58
+ 505              	.L61:
+ 178:../LPCUSB/blockdev_sd.c ****         case 0x0010: rprintf("Card internal ECC was applied, but failed to correct the data.\n");  
+ 506              		.loc 1 178 0
+ 507 035c 88009FE5 		ldr	r0, .L64+28
+ 508 0360 040000EA 		b	.L58
+ 509              	.L43:
+ 179:../LPCUSB/blockdev_sd.c ****         case 0x0020: rprintf("Write protect violation.\n");                                        
+ 510              		.loc 1 179 0
+ 511 0364 84009FE5 		ldr	r0, .L64+32
+ 512 0368 020000EA 		b	.L58
+ 513              	.L44:
+ 180:../LPCUSB/blockdev_sd.c ****         case 0x0040: rprintf("An invalid selection, sectors for erase.\n");                        
+ 514              		.loc 1 180 0
+ 515 036c 80009FE5 		ldr	r0, .L64+36
+ 516 0370 000000EA 		b	.L58
+ 517              	.L62:
+ 181:../LPCUSB/blockdev_sd.c ****         case 0x0080: rprintf("Out of Range, CSD_Overwrite.\n");                                    
+ 518              		.loc 1 181 0
+ 519 0374 7C009FE5 		ldr	r0, .L64+40
+ 520              	.L58:
+ 521 0378 FEFFFFEB 		bl	rprintf
+ 522              	.LVL51:
+ 523 037c 0F0000EA 		b	.L48
+ 524              	.LVL52:
+ 525              	.L36:
+ 183:../LPCUSB/blockdev_sd.c ****             if (value > 0x00FF)
+ 526              		.loc 1 183 0
+ 527 0380 FF0051E3 		cmp	r1, #255
+ 528 0384 0200009A 		bls	.L49
+ 185:../LPCUSB/blockdev_sd.c ****                 Resp8bError((U8) (value >> 8));
+ 529              		.loc 1 185 0
+ 530 0388 2104A0E1 		mov	r0, r1, lsr #8
+ 531 038c 3AFFFFEB 		bl	Resp8bError
+ 532              	.LVL53:
+ 533 0390 0A0000EA 		b	.L48
+ 534              	.LVL54:
+ 535              	.L49:
+ 189:../LPCUSB/blockdev_sd.c ****                 rprintf("Unknown error: 0x%x (see SanDisk docs p5-14).\n", value);
+ 536              		.loc 1 189 0
+ 537 0394 60009FE5 		ldr	r0, .L64+44
+ 538 0398 FEFFFFEB 		bl	rprintf
+ 539              	.LVL55:
+ 540 039c 070000EA 		b	.L48
+ 541              	.LVL56:
+ 542              	.L37:
+ 543              	.LBE12:
+ 544              	.LBE13:
+ 253:../LPCUSB/blockdev_sd.c **** 
+ 254:../LPCUSB/blockdev_sd.c ****     if (State() < 0)
+ 255:../LPCUSB/blockdev_sd.c ****     {
+ 256:../LPCUSB/blockdev_sd.c ****         rprintf("Card didn't return the ready state, breaking up...\n");
+ 257:../LPCUSB/blockdev_sd.c ****         return -2;
+ 258:../LPCUSB/blockdev_sd.c ****     }
+ 259:../LPCUSB/blockdev_sd.c **** 
+ 260:../LPCUSB/blockdev_sd.c ****     rprintf("SD Init done...\n");
+ 545              		.loc 1 260 0
+ 546 03a0 58009FE5 		ldr	r0, .L64+48
+ 547 03a4 FEFFFFEB 		bl	rprintf
+ 548              	.LVL57:
+ 261:../LPCUSB/blockdev_sd.c **** 
+ 262:../LPCUSB/blockdev_sd.c ****     return 0;
+ 549              		.loc 1 262 0
+ 550 03a8 0400A0E1 		mov	r0, r4
+ 551              	.L33:
+ 263:../LPCUSB/blockdev_sd.c **** }
+ 552              		.loc 1 263 0
+ 553 03ac 3840BDE8 		ldmfd	sp!, {r3, r4, r5, lr}
+ 554 03b0 1EFF2FE1 		bx	lr
+ 555              	.LVL58:
+ 556              	.L59:
+ 217:../LPCUSB/blockdev_sd.c ****         if (resp == 0xff)
+ 557              		.loc 1 217 0
+ 558 03b4 FF0050E3 		cmp	r0, #255
+ 559 03b8 A9FFFF1A 		bne	.L56
+ 560 03bc A4FFFFEA 		b	.L63
+ 561              	.LVL59:
+ 562              	.L48:
+ 256:../LPCUSB/blockdev_sd.c ****         rprintf("Card didn't return the ready state, breaking up...\n");
+ 563              		.loc 1 256 0
+ 564 03c0 3C009FE5 		ldr	r0, .L64+52
+ 565              	.L57:
+ 566 03c4 FEFFFFEB 		bl	rprintf
+ 257:../LPCUSB/blockdev_sd.c ****         return -2;
+ 567              		.loc 1 257 0
+ 568 03c8 0100E0E3 		mvn	r0, #1
+ 569 03cc F6FFFFEA 		b	.L33
+ 570              	.L65:
+ 571              		.align	2
+ 572              	.L64:
+ 573 03d0 D2000000 		.word	.LC11
+ 574 03d4 DD000000 		.word	.LC12
+ 575 03d8 017D0000 		.word	32001
+ 576 03dc E9000000 		.word	.LC13
+ 577 03e0 FA000000 		.word	.LC14
+ 578 03e4 22010000 		.word	.LC15
+ 579 03e8 4C010000 		.word	.LC16
+ 580 03ec 6D010000 		.word	.LC17
+ 581 03f0 AD010000 		.word	.LC18
+ 582 03f4 C7010000 		.word	.LC19
+ 583 03f8 F1010000 		.word	.LC20
+ 584 03fc 0F020000 		.word	.LC21
+ 585 0400 3E020000 		.word	.LC22
+ 586 0404 4F020000 		.word	.LC23
+ 587              		.cfi_endproc
+ 588              	.LFE6:
+ 590              		.align	2
+ 591              		.global	BlockDevWrite
+ 593              	BlockDevWrite:
+ 594              	.LFB7:
+ 264:../LPCUSB/blockdev_sd.c **** 
+ 265:../LPCUSB/blockdev_sd.c **** /*****************************************************************************/
+ 266:../LPCUSB/blockdev_sd.c **** 
+ 267:../LPCUSB/blockdev_sd.c **** 
+ 268:../LPCUSB/blockdev_sd.c **** 
+ 269:../LPCUSB/blockdev_sd.c **** /*****************************************************************************/
+ 270:../LPCUSB/blockdev_sd.c **** 
+ 271:../LPCUSB/blockdev_sd.c **** 
+ 272:../LPCUSB/blockdev_sd.c **** /*****************************************************************************/
+ 273:../LPCUSB/blockdev_sd.c **** 
+ 274:../LPCUSB/blockdev_sd.c **** /* ****************************************************************************
+ 275:../LPCUSB/blockdev_sd.c ****  * WAIT ?? -- FIXME
+ 276:../LPCUSB/blockdev_sd.c ****  * CMD_WRITE
+ 277:../LPCUSB/blockdev_sd.c ****  * WAIT
+ 278:../LPCUSB/blockdev_sd.c ****  * CARD RESP
+ 279:../LPCUSB/blockdev_sd.c ****  * WAIT
+ 280:../LPCUSB/blockdev_sd.c ****  * DATA BLOCK OUT
+ 281:../LPCUSB/blockdev_sd.c ****  *      START BLOCK
+ 282:../LPCUSB/blockdev_sd.c ****  *      DATA
+ 283:../LPCUSB/blockdev_sd.c ****  *      CHKS (2B)
+ 284:../LPCUSB/blockdev_sd.c ****  * BUSY...
+ 285:../LPCUSB/blockdev_sd.c ****  */
+ 286:../LPCUSB/blockdev_sd.c **** 
+ 287:../LPCUSB/blockdev_sd.c **** int BlockDevWrite(U32 dwAddress, U8 * pbBuf)
+ 288:../LPCUSB/blockdev_sd.c **** {
+ 595              		.loc 1 288 0
+ 596              		.cfi_startproc
+ 597              		@ Function supports interworking.
+ 598              		@ args = 0, pretend = 0, frame = 0
+ 599              		@ frame_needed = 0, uses_anonymous_args = 0
+ 600              	.LVL60:
+ 601 0408 10402DE9 		stmfd	sp!, {r4, lr}
+ 602              	.LCFI6:
+ 603              		.cfi_def_cfa_offset 8
+ 604              		.cfi_offset 14, -4
+ 605              		.cfi_offset 4, -8
+ 606              		.loc 1 288 0
+ 607 040c 0140A0E1 		mov	r4, r1
+ 289:../LPCUSB/blockdev_sd.c ****     U32 place;
+ 290:../LPCUSB/blockdev_sd.c ****     U16 t = 0;
+ 291:../LPCUSB/blockdev_sd.c **** 
+ 292:../LPCUSB/blockdev_sd.c ****     place = 512 * dwAddress;
+ 608              		.loc 1 292 0
+ 609 0410 8014A0E1 		mov	r1, r0, asl #9
+ 610              	.LVL61:
+ 293:../LPCUSB/blockdev_sd.c ****     Command(CMD_WRITE, place);
+ 611              		.loc 1 293 0
+ 612 0414 1800A0E3 		mov	r0, #24
+ 613              	.LVL62:
+ 614 0418 03FFFFEB 		bl	Command
+ 615              	.LVL63:
+ 294:../LPCUSB/blockdev_sd.c **** 
+ 295:../LPCUSB/blockdev_sd.c ****     Resp8b();               /* Card response */
+ 616              		.loc 1 295 0
+ 617 041c F7FEFFEB 		bl	Resp8b
+ 296:../LPCUSB/blockdev_sd.c **** 
+ 297:../LPCUSB/blockdev_sd.c ****     SPISend(0xfe);          /* Start block */
+ 618              		.loc 1 297 0
+ 619 0420 FE00A0E3 		mov	r0, #254
+ 620 0424 FEFFFFEB 		bl	SPISend
+ 298:../LPCUSB/blockdev_sd.c ****     SPISendN(pbBuf, 512);
+ 621              		.loc 1 298 0
+ 622 0428 021CA0E3 		mov	r1, #512
+ 623 042c 0400A0E1 		mov	r0, r4
+ 624 0430 FEFFFFEB 		bl	SPISendN
+ 299:../LPCUSB/blockdev_sd.c ****     SPISend(0xff);          /* Checksum part 1 */
+ 625              		.loc 1 299 0
+ 626 0434 FF00A0E3 		mov	r0, #255
+ 627 0438 FEFFFFEB 		bl	SPISend
+ 300:../LPCUSB/blockdev_sd.c ****     SPISend(0xff);          /* Checksum part 2 */
+ 628              		.loc 1 300 0
+ 629 043c FF00A0E3 		mov	r0, #255
+ 630 0440 FEFFFFEB 		bl	SPISend
+ 301:../LPCUSB/blockdev_sd.c **** 
+ 302:../LPCUSB/blockdev_sd.c ****     SPISend(0xff);
+ 631              		.loc 1 302 0
+ 632 0444 FF00A0E3 		mov	r0, #255
+ 633 0448 FEFFFFEB 		bl	SPISend
+ 634              	.LVL64:
+ 635              	.L67:
+ 303:../LPCUSB/blockdev_sd.c **** 
+ 304:../LPCUSB/blockdev_sd.c ****     while (SPISend(0xff) != 0xff)
+ 636              		.loc 1 304 0 discriminator 1
+ 637 044c FF00A0E3 		mov	r0, #255
+ 638 0450 FEFFFFEB 		bl	SPISend
+ 639 0454 FF0050E3 		cmp	r0, #255
+ 640 0458 FBFFFF1A 		bne	.L67
+ 305:../LPCUSB/blockdev_sd.c ****     {
+ 306:../LPCUSB/blockdev_sd.c ****         t++;
+ 307:../LPCUSB/blockdev_sd.c ****     }
+ 308:../LPCUSB/blockdev_sd.c **** 
+ 309:../LPCUSB/blockdev_sd.c ****     return 0;
+ 310:../LPCUSB/blockdev_sd.c **** }
+ 641              		.loc 1 310 0
+ 642 045c 0000A0E3 		mov	r0, #0
+ 643 0460 1040BDE8 		ldmfd	sp!, {r4, lr}
+ 644 0464 1EFF2FE1 		bx	lr
+ 645              		.cfi_endproc
+ 646              	.LFE7:
+ 648              		.align	2
+ 649              		.global	BlockDevRead
+ 651              	BlockDevRead:
+ 652              	.LFB8:
+ 311:../LPCUSB/blockdev_sd.c **** 
+ 312:../LPCUSB/blockdev_sd.c **** /*****************************************************************************/
+ 313:../LPCUSB/blockdev_sd.c **** 
+ 314:../LPCUSB/blockdev_sd.c **** /* ****************************************************************************
+ 315:../LPCUSB/blockdev_sd.c ****  * WAIT ?? -- FIXME
+ 316:../LPCUSB/blockdev_sd.c ****  * CMD_CMD_
+ 317:../LPCUSB/blockdev_sd.c ****  * WAIT
+ 318:../LPCUSB/blockdev_sd.c ****  * CARD RESP
+ 319:../LPCUSB/blockdev_sd.c ****  * WAIT
+ 320:../LPCUSB/blockdev_sd.c ****  * DATA BLOCK IN
+ 321:../LPCUSB/blockdev_sd.c ****  *      START BLOCK
+ 322:../LPCUSB/blockdev_sd.c ****  *      DATA
+ 323:../LPCUSB/blockdev_sd.c ****  *      CHKS (2B)
+ 324:../LPCUSB/blockdev_sd.c ****  */
+ 325:../LPCUSB/blockdev_sd.c **** 
+ 326:../LPCUSB/blockdev_sd.c **** int BlockDevRead(U32 dwAddress, U8 * pbBuf)
+ 327:../LPCUSB/blockdev_sd.c **** {
+ 653              		.loc 1 327 0
+ 654              		.cfi_startproc
+ 655              		@ Function supports interworking.
+ 656              		@ args = 0, pretend = 0, frame = 0
+ 657              		@ frame_needed = 0, uses_anonymous_args = 0
+ 658              	.LVL65:
+ 659 0468 70402DE9 		stmfd	sp!, {r4, r5, r6, lr}
+ 660              	.LCFI7:
+ 661              		.cfi_def_cfa_offset 16
+ 662              		.cfi_offset 14, -4
+ 663              		.cfi_offset 6, -8
+ 664              		.cfi_offset 5, -12
+ 665              		.cfi_offset 4, -16
+ 666              		.loc 1 327 0
+ 667 046c 0150A0E1 		mov	r5, r1
+ 328:../LPCUSB/blockdev_sd.c ****     U8 cardresp;
+ 329:../LPCUSB/blockdev_sd.c ****     U8 firstblock;
+ 330:../LPCUSB/blockdev_sd.c ****     U16 fb_timeout = 0xffff;
+ 331:../LPCUSB/blockdev_sd.c ****     U32 place;
+ 332:../LPCUSB/blockdev_sd.c **** 
+ 333:../LPCUSB/blockdev_sd.c ****     place = 512 * dwAddress;
+ 668              		.loc 1 333 0
+ 669 0470 8014A0E1 		mov	r1, r0, asl #9
+ 670              	.LVL66:
+ 334:../LPCUSB/blockdev_sd.c ****     Command(CMD_READSINGLEBLOCK, place);
+ 671              		.loc 1 334 0
+ 672 0474 1100A0E3 		mov	r0, #17
+ 673              	.LVL67:
+ 674 0478 EBFEFFEB 		bl	Command
+ 675              	.LVL68:
+ 335:../LPCUSB/blockdev_sd.c **** 
+ 336:../LPCUSB/blockdev_sd.c ****     cardresp = Resp8b();        /* Card response */
+ 676              		.loc 1 336 0
+ 677 047c DFFEFFEB 		bl	Resp8b
+ 678 0480 0060A0E3 		mov	r6, #0
+ 679 0484 0040A0E1 		mov	r4, r0
+ 680              	.LVL69:
+ 681              	.L71:
+ 337:../LPCUSB/blockdev_sd.c **** 
+ 338:../LPCUSB/blockdev_sd.c ****     /* Wait for startblock */
+ 339:../LPCUSB/blockdev_sd.c ****     do
+ 340:../LPCUSB/blockdev_sd.c ****     {
+ 341:../LPCUSB/blockdev_sd.c ****         firstblock = Resp8b();
+ 682              		.loc 1 341 0 discriminator 1
+ 683 0488 DCFEFFEB 		bl	Resp8b
+ 684              	.LVL70:
+ 342:../LPCUSB/blockdev_sd.c ****     }
+ 343:../LPCUSB/blockdev_sd.c ****     while (firstblock == 0xff && fb_timeout--);
+ 685              		.loc 1 343 0 discriminator 1
+ 686 048c FF0050E3 		cmp	r0, #255
+ 687 0490 0200001A 		bne	.L70
+ 688 0494 016086E2 		add	r6, r6, #1
+ 689 0498 010856E3 		cmp	r6, #65536
+ 690 049c F9FFFF1A 		bne	.L71
+ 691              	.L70:
+ 344:../LPCUSB/blockdev_sd.c **** 
+ 345:../LPCUSB/blockdev_sd.c ****     if (cardresp != 0x00 || firstblock != 0xfe)
+ 692              		.loc 1 345 0
+ 693 04a0 000054E3 		cmp	r4, #0
+ 694 04a4 FE005003 		cmpeq	r0, #254
+ 695 04a8 0040A003 		moveq	r4, #0
+ 696 04ac 0140A013 		movne	r4, #1
+ 697              	.LVL71:
+ 698 04b0 0200000A 		beq	.L72
+ 346:../LPCUSB/blockdev_sd.c ****     {
+ 347:../LPCUSB/blockdev_sd.c ****         Resp8bError(firstblock);
+ 699              		.loc 1 347 0
+ 700 04b4 F0FEFFEB 		bl	Resp8bError
+ 701              	.LVL72:
+ 348:../LPCUSB/blockdev_sd.c ****         return -1;
+ 702              		.loc 1 348 0
+ 703 04b8 0000E0E3 		mvn	r0, #0
+ 704 04bc 070000EA 		b	.L73
+ 705              	.LVL73:
+ 706              	.L72:
+ 349:../LPCUSB/blockdev_sd.c ****     }
+ 350:../LPCUSB/blockdev_sd.c **** 
+ 351:../LPCUSB/blockdev_sd.c ****     SPIRecvN(pbBuf, 512);
+ 707              		.loc 1 351 0
+ 708 04c0 021CA0E3 		mov	r1, #512
+ 709 04c4 0500A0E1 		mov	r0, r5
+ 710              	.LVL74:
+ 711 04c8 FEFFFFEB 		bl	SPIRecvN
+ 352:../LPCUSB/blockdev_sd.c **** 
+ 353:../LPCUSB/blockdev_sd.c ****     /* Checksum (2 byte) - ignore for now */
+ 354:../LPCUSB/blockdev_sd.c ****     SPISend(0xff);
+ 712              		.loc 1 354 0
+ 713 04cc FF00A0E3 		mov	r0, #255
+ 714 04d0 FEFFFFEB 		bl	SPISend
+ 355:../LPCUSB/blockdev_sd.c ****     SPISend(0xff);
+ 715              		.loc 1 355 0
+ 716 04d4 FF00A0E3 		mov	r0, #255
+ 717 04d8 FEFFFFEB 		bl	SPISend
+ 356:../LPCUSB/blockdev_sd.c **** 
+ 357:../LPCUSB/blockdev_sd.c ****     return 0;
+ 718              		.loc 1 357 0
+ 719 04dc 0400A0E1 		mov	r0, r4
+ 720              	.L73:
+ 358:../LPCUSB/blockdev_sd.c **** }
+ 721              		.loc 1 358 0
+ 722 04e0 7040BDE8 		ldmfd	sp!, {r4, r5, r6, lr}
+ 723 04e4 1EFF2FE1 		bx	lr
+ 724              		.cfi_endproc
+ 725              	.LFE8:
+ 727              		.section	.rodata.str1.1,"aMS",%progbits,1
+ 728              	.LC0:
+ 729 0000 41726775 		.ascii	"Argument out of bounds.\012\000"
+ 729      6D656E74 
+ 729      206F7574 
+ 729      206F6620 
+ 729      626F756E 
+ 730              	.LC1:
+ 731 0019 41646472 		.ascii	"Address out of bounds.\012\000"
+ 731      65737320 
+ 731      6F757420 
+ 731      6F662062 
+ 731      6F756E64 
+ 732              	.LC2:
+ 733 0031 4572726F 		.ascii	"Error during erase sequence.\012\000"
+ 733      72206475 
+ 733      72696E67 
+ 733      20657261 
+ 733      73652073 
+ 734              	.LC3:
+ 735 004f 43524320 		.ascii	"CRC failed.\012\000"
+ 735      6661696C 
+ 735      65642E0A 
+ 735      00
+ 736              	.LC4:
+ 737 005c 496C6C65 		.ascii	"Illegal command.\012\000"
+ 737      67616C20 
+ 737      636F6D6D 
+ 737      616E642E 
+ 737      0A00
+ 738              	.LC5:
+ 739 006e 45726173 		.ascii	"Erase reset (see SanDisk docs p5-13).\012\000"
+ 739      65207265 
+ 739      73657420 
+ 739      28736565 
+ 739      2053616E 
+ 740              	.LC6:
+ 741 0095 2E00     		.ascii	".\000"
+ 742              	.LC7:
+ 743 0097 556E6B6E 		.ascii	"Unknown error 0x%x (see SanDisk docs p5-13).\012\000"
+ 743      6F776E20 
+ 743      6572726F 
+ 743      72203078 
+ 743      25782028 
+ 744              	.LC8:
+ 745 00c5 4353443A 		.ascii	"CSD:\000"
+ 745      00
+ 746              	.LC9:
+ 747 00ca 20253032 		.ascii	" %02x\000"
+ 747      7800
+ 748              	.LC10:
+ 749 00d0 0A00     		.ascii	"\012\000"
+ 750              	.LC11:
+ 751 00d2 72657370 		.ascii	"resp=0xff\012\000"
+ 751      3D307866 
+ 751      660A00
+ 752              	.LC12:
+ 753 00dd 72657370 		.ascii	"resp!=0xff\012\000"
+ 753      213D3078 
+ 753      66660A00 
+ 754              	.LC13:
+ 755 00e9 43617264 		.ascii	"Card is Locked.\012\000"
+ 755      20697320 
+ 755      4C6F636B 
+ 755      65642E0A 
+ 755      00
+ 756              	.LC14:
+ 757 00fa 57502045 		.ascii	"WP Erase Skip, Lock/Unlock Cmd Failed.\012\000"
+ 757      72617365 
+ 757      20536B69 
+ 757      702C204C 
+ 757      6F636B2F 
+ 758              	.LC15:
+ 759 0122 47656E65 		.ascii	"General / Unknown error -- card broken?.\012\000"
+ 759      72616C20 
+ 759      2F20556E 
+ 759      6B6E6F77 
+ 759      6E206572 
+ 760              	.LC16:
+ 761 014c 496E7465 		.ascii	"Internal card controller error.\012\000"
+ 761      726E616C 
+ 761      20636172 
+ 761      6420636F 
+ 761      6E74726F 
+ 762              	.LC17:
+ 763 016d 43617264 		.ascii	"Card internal ECC was applied, but failed to correc"
+ 763      20696E74 
+ 763      65726E61 
+ 763      6C204543 
+ 763      43207761 
+ 764 01a0 74207468 		.ascii	"t the data.\012\000"
+ 764      65206461 
+ 764      74612E0A 
+ 764      00
+ 765              	.LC18:
+ 766 01ad 57726974 		.ascii	"Write protect violation.\012\000"
+ 766      65207072 
+ 766      6F746563 
+ 766      74207669 
+ 766      6F6C6174 
+ 767              	.LC19:
+ 768 01c7 416E2069 		.ascii	"An invalid selection, sectors for erase.\012\000"
+ 768      6E76616C 
+ 768      69642073 
+ 768      656C6563 
+ 768      74696F6E 
+ 769              	.LC20:
+ 770 01f1 4F757420 		.ascii	"Out of Range, CSD_Overwrite.\012\000"
+ 770      6F662052 
+ 770      616E6765 
+ 770      2C204353 
+ 770      445F4F76 
+ 771              	.LC21:
+ 772 020f 556E6B6E 		.ascii	"Unknown error: 0x%x (see SanDisk docs p5-14).\012\000"
+ 772      6F776E20 
+ 772      6572726F 
+ 772      723A2030 
+ 772      78257820 
+ 773              	.LC22:
+ 774 023e 53442049 		.ascii	"SD Init done...\012\000"
+ 774      6E697420 
+ 774      646F6E65 
+ 774      2E2E2E0A 
+ 774      00
+ 775              	.LC23:
+ 776 024f 43617264 		.ascii	"Card didn't return the ready state, breaking up...\012"
+ 776      20646964 
+ 776      6E277420 
+ 776      72657475 
+ 776      726E2074 
+ 777 0282 00       		.ascii	"\000"
+ 778              		.text
+ 779              	.Letext0:
+ 780              		.file 2 "../LPCUSB/type.h"
+DEFINED SYMBOLS
+                            *ABS*:00000000 blockdev_sd.c
+     /tmp/ccLuZCai.s:16     .text:00000000 $a
+     /tmp/ccLuZCai.s:18     .text:00000000 Resp8b
+     /tmp/ccLuZCai.s:58     .text:0000002c Command
+     /tmp/ccLuZCai.s:115    .text:0000007c Resp8bError
+     /tmp/ccLuZCai.s:207    .text:00000114 $d
+     /tmp/ccLuZCai.s:218    .text:00000134 $a
+     /tmp/ccLuZCai.s:221    .text:00000134 BlockDevGetSize
+     /tmp/ccLuZCai.s:339    .text:00000218 $d
+     /tmp/ccLuZCai.s:345    .text:00000224 $a
+     /tmp/ccLuZCai.s:348    .text:00000224 BlockDevInit
+     /tmp/ccLuZCai.s:573    .text:000003d0 $d
+     /tmp/ccLuZCai.s:590    .text:00000408 $a
+     /tmp/ccLuZCai.s:593    .text:00000408 BlockDevWrite
+     /tmp/ccLuZCai.s:651    .text:00000468 BlockDevRead
+                     .debug_frame:00000010 $d
+
+UNDEFINED SYMBOLS
+SPISend
+SPISendN
+rprintf
+SPIInit
+SPISetSpeed
+SPIRecvN
