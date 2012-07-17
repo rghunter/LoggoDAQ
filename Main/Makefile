@@ -75,6 +75,9 @@ SRC += $(LIBPATH)itoa.c
 
 #i2c bitbang library
 SRC += $(LIBPATH)twi.c
+SRC += $(LIBPATH)ADXL345.c
+SRC += $(LIBPATH)util.c
+SRC += $(LIBPATH)error.c
 
 # List C source files here which must be compiled in ARM-Mode.
 # use file-extension c for "c-only"-files

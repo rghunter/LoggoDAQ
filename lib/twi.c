@@ -212,3 +212,11 @@ int i2c_rx_string(unsigned char addr, char* buf, int len) {
   return 0;
 }
 
+unsigned char i2c_read_reg(unsigned char addr, unsigned char reg)
+{
+	tx(1,0,addr<<1 | 0);
+	tx(0,1,reg);
+	tx(1,0,addr<<1 | 1);
+	return rx(1,1);
+}
+

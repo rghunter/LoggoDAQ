@@ -51,4 +51,6 @@ int i2c_tx_string(unsigned char addr, char* buf, int len);
 //  some other number for failure
 int i2c_rx_string(unsigned char addr, char* buf, int len);
 
+unsigned char i2c_read_reg(unsigned char addr, unsigned char reg);
+
 #endif

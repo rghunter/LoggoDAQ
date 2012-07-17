@@ -9,7 +9,9 @@
  ******************************************************/
 #include <stdio.h>
 #include <string.h>
+#include "ADXL345.h"
 #include "LPC214x.h"
+#include "error.h"
 
 //Main application subfiles
 #include "setup.h"
@@ -22,9 +24,21 @@
  * Arduino-style structure here
  ******************************************************/
 
+char compassBuf[255]="x00";
+char regBuf[255] = "\x0";
+#define ACCEL_ADDR 0x53
+
 int main (void) {
   setup();
-  for(;;) loop();
+  set_light(1,1);
+  while(1){
+  if(!ADXL345_init())
+	  error_red_flash();
+
+  util_delay_ms(10);
+  }while(1);
+//  error_green_flash();
+  //for(;;) loop();
 }
 
 /*******************************************************
@@ -34,7 +48,7 @@ int main (void) {
 static int light_mask[3]={0x00000004,0x00000800,0x80000000};
 
 void set_light(int statnum, int onoff) {
-  if(onoff & !powerSave){ 
+  if(onoff){
     //on 
     IOCLR0 = light_mask[statnum]; 
   } else { 
